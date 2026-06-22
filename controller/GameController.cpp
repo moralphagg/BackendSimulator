@@ -1,0 +1,638 @@
+#include "GameController.h"
+#include "../core/SkillSystem.h"
+#include "../core/ProjectQueue.h"
+#include "../core/CheatEngine.h"
+#include "../core/SaveManager.h"
+#include <QRandomGenerator>
+#include <QDateTime>
+
+GameController::GameController(QObject *parent)
+    : QObject(parent)
+{
+    if (!SaveManager::load(m_state))
+    {
+        m_state.initSkills();
+        ProjectQueue::refill(m_state);
+    }
+
+    emit_msg("Запуск симулятора бэкенд-разработчика!", "highlight");
+    emit_msg("Введите команду для начала работы...");
+
+    m_gameTimer = new QTimer(this);
+
+    connect(
+        m_gameTimer,
+        &QTimer::timeout,
+        this,
+        &GameController::onGameTick
+        );
+
+    m_gameTimer->start(1000);
+}
+
+void GameController::advanceTime(int minutes)
+{
+    m_state.gameMinutes += minutes;
+
+    while (m_state.gameMinutes >= 60)
+    {
+        m_state.gameMinutes -= 60;
+        m_state.gameHours++;
+
+        if (m_state.gameHours >= 24)
+        {
+            m_state.gameHours = 0;
+            m_state.gameDay++;
+        }
+    }
+}
+
+
+void GameController::emit_msg(const QString &text, const QString &type) {
+    emit messageAdded(text, type);
+}
+
+void GameController::executeCommand(
+    const QString &rawCmd)
+{
+    QString cmd =
+        rawCmd.trimmed().toLower();
+
+    bool wasGuiUnlocked =
+        m_state.guiUnlocked;
+
+    QString cheat =
+        CheatEngine::check(
+            m_state,
+            cmd
+            );
+
+    if (!cheat.isEmpty())
+    {
+        emit_msg(
+            cheat,
+            "highlight"
+            );
+
+        SaveManager::save(m_state);
+
+        if (!wasGuiUnlocked &&
+            m_state.guiUnlocked)
+        {
+            emit guiUnlocked();
+        }
+
+        emit stateChanged();
+        return;
+    }
+
+    postCommand(cmd);
+}
+
+void GameController::postCommand(const QString &cmd) {
+    QPair<QString,QString> result = {"", "text"};
+
+    if      (cmd == "start")     result = cmdStart();
+    else if (cmd == "work")      result = cmdWork();
+    else if (cmd == "bugs")      result = cmdBugs();
+    else if (cmd == "learn")     result = cmdLearn();
+    else if (cmd == "rest")      result = cmdRest();
+    else if (cmd == "deploy")    result = cmdDeploy();
+    else if (cmd == "optimize")  result = cmdOptimize();
+    else if (cmd == "meeting")   result = cmdMeeting();
+    else if (cmd == "research")  result = cmdResearch();
+    else if (cmd == "mentor")    result = cmdMentor();
+    else if (cmd == "freelance") result = cmdFreelance();
+    else if (cmd == "refactor")  result = cmdRefactor();
+    else if (cmd == "document")  result = cmdDocument();
+    else if (cmd == "analyze")   result = cmdAnalyze();
+    else if (cmd == "scale")     result = cmdScale();
+    else if (cmd == "migrate")   result = cmdMigrate();
+    else if (cmd == "audit")     result = cmdAudit();
+    else if (cmd == "clear")     { emit_msg("__clear__"); return; }
+    else if (cmd == "save")      result = cmdSave();
+    else if (cmd == "load")      result = cmdLoad();
+    else if (cmd.isEmpty())      return;
+    else result = {"Неизвестная команда: " + cmd, "error"};
+
+    if (!result.first.isEmpty())
+        emit_msg(result.first, result.second);
+
+    checkLevelUp();
+    updateProjectQueue();
+    handleRandomEvent();
+
+    SaveManager::save(m_state);
+
+    emit stateChanged();
+}
+
+QPair<QString,QString> GameController::cmdStart() {
+    if (m_state.currentProjects.size() >= m_state.maxConcurrentProjects)
+        return {QString("Максимум %1 активных проектов!").arg(m_state.maxConcurrentProjects), "warning"};
+
+    if (m_state.projectQueue.isEmpty())
+        return {"Нет доступных проектов!", "warning"};
+
+    if (m_state.energy < 25)
+        return {"Слишком устал!", "warning"};
+
+    Project p = m_state.projectQueue.dequeue();
+
+    m_state.currentProjects.enqueue(p);
+
+    m_state.energy -= 25;
+
+    advanceTime(30);
+
+    return {QString("Начал проект: %1 (-25 энергии)").arg(p.name), "success"};
+}
+
+QPair<QString,QString> GameController::cmdWork()
+{
+    if (m_state.currentProjects.isEmpty())
+    {
+        return {"Нет активного проекта", "warning"};
+    }
+
+    if (m_state.energy < 15)
+    {
+        return {"Слишком устал", "warning"};
+    }
+
+    Project &p =
+        m_state.currentProjects.head();
+
+    int progressGain =
+        QRandomGenerator::global()
+            ->bounded(5, 15);
+
+    progressGain =
+        qMax(
+            1,
+            progressGain - p.difficulty
+            );
+
+    p.progress += progressGain;
+
+    if (p.progress > 100)
+        p.progress = 100;
+
+    m_state.energy -= 20;
+
+    advanceTime(120);
+
+    if (
+        QRandomGenerator::global()
+            ->bounded(100)
+        < 25
+        )
+    {
+        p.bugs +=
+            QRandomGenerator::global()
+                ->bounded(1, 4);
+    }
+
+    return {
+        QString(
+            "%1\nПрогресс: %2%\nБагов: %3"
+            )
+            .arg(p.name)
+            .arg(p.progress)
+            .arg(p.bugs),
+        "success"
+    };
+}
+
+QPair<QString,QString> GameController::cmdBugs()
+{
+    if (m_state.energy < 15)
+        return {
+            "Слишком устал!", "warning"};
+
+    if (m_state.currentProjects.isEmpty())
+        return {
+            "Нет активных проектов!", "warning"};
+
+    Project &project =
+        m_state.currentProjects.head();
+
+    if (project.bugs <= 0)
+        return {"В проекте нет багов!", "warning"};
+
+    int fixed =
+        qMin(
+            project.bugs,
+            QRandomGenerator::global()->bounded(1, 4)
+            );
+
+    project.bugs -= fixed;
+
+    int reward =
+        int(
+            fixed * 50 *
+            SkillSystem::reputationBonus(m_state)
+            );
+
+    int xp = fixed * 5;
+
+    m_state.bugsFixed += fixed;
+    m_state.money += reward;
+    m_state.xp += xp;
+    m_state.energy -= 15;
+
+    advanceTime(60);
+
+    m_state.skills["debugging"] +=
+        0.1 *
+        SkillSystem::skillBonusMultiplier(m_state);
+
+    return {
+        QString(
+            "Исправлено %1 багов. Осталось: %2. +%3 денег, +%4 опыта"
+            )
+            .arg(fixed)
+            .arg(project.bugs)
+            .arg(reward)
+            .arg(xp),
+        "success"
+    };
+}
+
+QPair<QString,QString> GameController::cmdLearn() {
+    int cost = SkillSystem::learnCost(m_state);
+    if (m_state.money  < cost)  return {QString("Недостаточно денег! (%1)").arg(cost), "warning"};
+    if (m_state.energy < 20)    return {"Слишком устал!", "warning"};
+    QString info = SkillSystem::improveRandom(m_state, m_state.skills.keys(), 0.2, 0.5);
+    m_state.money  -= cost;
+    m_state.energy -= 20;
+    advanceTime(180);
+    return {QString("Прокачал %1 (-%2 денег)").arg(info).arg(cost), "success"};
+}
+
+QPair<QString,QString> GameController::cmdRest() {
+    int gain = QRandomGenerator::global()->bounded(25, 46);
+    m_state.energy = qMin(m_state.maxEnergy, m_state.energy + gain);
+    advanceTime(480);
+    return {QString("Отдохнул: +%1 энергии").arg(gain), "success"};
+}
+
+QPair<QString,QString> GameController::cmdDeploy() {
+
+    if (m_state.currentProjects.isEmpty())
+    {
+        return {
+            "Нет активных проектов!",
+            "warning"
+        };
+    }
+
+    Project &p =
+        m_state.currentProjects.head();
+
+    QString projectName =
+        p.name;
+
+    if (p.progress < 100)
+    {
+        return {
+            QString(
+                "Проект готов только на %1%"
+                )
+                .arg(p.progress),
+            "warning"
+        };
+    }
+
+    if (p.bugs > 0)
+    {
+        return {
+            QString(
+                "Осталось исправить %1 багов"
+                )
+                .arg(p.bugs),
+            "warning"
+        };
+    }
+
+    double repBonus =
+        SkillSystem::reputationBonus(m_state);
+
+    int reward =
+        int(p.reward * repBonus);
+
+    m_state.money += reward;
+    m_state.xp += p.difficulty * 10;
+    m_state.reputation += p.difficulty;
+
+    m_state.categoryReputation[p.category]
+        += p.difficulty;
+
+    m_state.projectsCompleted++;
+
+    if (p.category == "web")
+    {
+        m_state.skills["api_design"] += 0.3;
+    }
+
+    else if (p.category == "database")
+    {
+        m_state.skills["sql"] += 0.3;
+    }
+
+    else if (p.category == "microservice")
+    {
+        m_state.skills["microservices"] += 0.3;
+    }
+
+    else if (p.category == "devops")
+    {
+        m_state.skills["docker"] += 0.3;
+        m_state.skills["ci_cd"] += 0.3;
+    }
+
+    else if (p.category == "cloud")
+    {
+        m_state.skills["aws"] += 0.3;
+        m_state.skills["serverless"] += 0.2;
+    }
+
+    else if (p.category == "ai")
+    {
+        m_state.skills["ml"] += 0.4;
+    }
+
+    else if (p.category == "security")
+    {
+        m_state.skills["security"] += 0.4;
+    }
+
+    else if (p.category == "distributed")
+    {
+        m_state.skills["kafka"] += 0.2;
+        m_state.skills["microservices"] += 0.2;
+    }
+
+    advanceTime(
+        p.difficulty * 30
+        );
+
+    m_state.currentProjects.dequeue();
+
+    return {
+        QString(
+            "Проект '%1' задеплоен! +%2 денег, +%3 опыта"
+            )
+            .arg(projectName)
+            .arg(reward)
+            .arg(p.difficulty * 10),
+        "success"
+    };
+}
+
+QPair<QString,QString> GameController::cmdOptimize() {
+    if (m_state.energy < 18) return {"Слишком устал для оптимизации!", "warning"};
+    QString info = SkillSystem::improveRandom(m_state, {"python","debugging"}, 0.1, 0.3);
+    m_state.xp     += 8;
+    m_state.energy -= 18;
+
+    advanceTime(60);
+
+    return {QString("Код оптимизирован! %1, +8 опыта").arg(info), "success"};
+}
+
+QPair<QString,QString> GameController::cmdMeeting() {
+    if (m_state.energy < 12) return {"Слишком устал для митинга!", "warning"};
+    int eLoss = QRandomGenerator::global()->bounded(10, 21);
+    int xp    = QRandomGenerator::global()->bounded(5, 11);
+    m_state.energy -= eLoss;
+    advanceTime(90);
+    m_state.xp     += xp;
+    m_state.skills["api_design"] += 0.1 * SkillSystem::skillBonusMultiplier(m_state);
+    return {QString("Митинг проведён. -%1 энергии, +%2 опыта").arg(eLoss).arg(xp), "text"};
+}
+
+QPair<QString,QString> GameController::cmdResearch() {
+    if (m_state.energy < 25) return {"Слишком устал для исследований!", "warning"};
+    int cost = SkillSystem::researchCost(m_state);
+    if (m_state.money < cost) return {QString("Недостаточно денег! (%1)").arg(cost), "warning"};
+    QString info = SkillSystem::improveRandom(m_state,
+        {"docker","aws","ml","security","kubernetes","redis","graphql","microservices","serverless"},
+        0.2, 0.4);
+    m_state.money  -= cost;
+    m_state.energy -= 45;
+    advanceTime(240);
+    m_state.xp     += 36;
+    return {QString("Исследование завершено! %1, -%2 денег").arg(info).arg(cost), "success"};
+}
+
+QPair<QString,QString> GameController::cmdMentor() {
+    if (m_state.energy < 15) return {"Слишком устал для менторства!", "warning"};
+    int cost = SkillSystem::mentorCost(m_state);
+    if (m_state.money < cost) return {QString("Недостаточно денег! (%1)").arg(cost), "warning"};
+    int xp  = QRandomGenerator::global()->bounded(10, 21);
+    int rep = QRandomGenerator::global()->bounded(1, 4);
+    m_state.xp         += xp;
+    m_state.reputation += rep;
+    m_state.money      -= cost;
+    m_state.energy     -= 35;
+    advanceTime(120);
+    return {QString("Менторинг завершён! +%1 опыта, +%2 репутации (-%3 денег)").arg(xp).arg(rep).arg(cost), "success"};
+}
+
+QPair<QString,QString> GameController::cmdFreelance()
+{
+    if (m_state.energy < 15)
+        return {"Слишком устал для фриланса!", "warning"};
+
+    int reward =
+        QRandomGenerator::global()
+            ->bounded(300, 801);
+
+    int xp =
+        QRandomGenerator::global()
+            ->bounded(5, 16);
+
+    m_state.money += reward;
+    m_state.xp += xp;
+    m_state.energy -= 15;
+
+    advanceTime(180);
+
+    return {
+        QString(
+            "Фриланс-заказ выполнен! +%1 денег, +%2 опыта"
+            )
+            .arg(reward)
+            .arg(xp),
+        "success"
+    };
+}
+
+QPair<QString,QString> GameController::cmdRefactor() {
+    if (m_state.energy < 20) return {"Слишком устал для рефакторинга!", "warning"};
+    QString info = SkillSystem::improveRandom(m_state, {"python","debugging","api_design"}, 0.2, 0.4);
+    m_state.xp     += 10;
+    m_state.energy -= 20;
+    advanceTime(150);
+    return {QString("Рефакторинг завершён! %1, +10 опыта").arg(info), "success"};
+}
+
+QPair<QString,QString> GameController::cmdDocument() {
+    if (m_state.energy < 12) return {"Слишком устал для документации!", "warning"};
+    int money = int(QRandomGenerator::global()->bounded(50, 101) * SkillSystem::reputationBonus(m_state));
+    int xp    = QRandomGenerator::global()->bounded(5, 11);
+    m_state.money  += money;
+    m_state.xp     += xp;
+    m_state.energy -= 12;
+    advanceTime(90);
+    return {QString("Документация написана! +%1 денег, +%2 опыта").arg(money).arg(xp), "success"};
+}
+
+QPair<QString,QString> GameController::cmdAnalyze() {
+    if (m_state.energy < 15) return {"Слишком устал для анализа!", "warning"};
+    QString info = SkillSystem::improveRandom(m_state, {"python","debugging","deployment"}, 0.1, 0.2);
+    m_state.xp     += 7;
+    m_state.energy -= 35;
+    advanceTime(120);
+    return {QString("Анализ производительности завершён! %1, +7 опыта").arg(info), "success"};
+}
+
+QPair<QString,QString> GameController::cmdScale() {
+    if (m_state.energy < 25) return {"Слишком устал для масштабирования!", "warning"};
+    int cost = SkillSystem::scaleCost(m_state);
+    if (m_state.money < cost) return {QString("Недостаточно денег! (%1)").arg(cost), "warning"};
+    QString info = SkillSystem::improveRandom(m_state, {"kubernetes","aws","microservices"}, 0.3, 0.5);
+    m_state.money  -= cost;
+    m_state.xp     += 20;
+    m_state.energy -= 55;
+    advanceTime(270);
+    return {QString("Система масштабирована! %1, +20 опыта (-%2 денег)").arg(info).arg(cost), "success"};
+}
+
+QPair<QString,QString> GameController::cmdMigrate() {
+    if (m_state.energy < 22) return {"Слишком устал для миграции!", "warning"};
+    int cost = SkillSystem::migrateCost(m_state);
+    if (m_state.money < cost) return {QString("Недостаточно денег! (%1)").arg(cost), "warning"};
+    if (QRandomGenerator::global()->generateDouble() < 0.7) {
+        QString info = SkillSystem::improveRandom(m_state, {"sql"}, 0.2, 0.4);
+        m_state.money  -= cost;
+        m_state.xp     += 18;
+        m_state.energy -= 22;
+        advanceTime(180);
+        return {QString("Миграция базы успешна! %1, +18 опыта (-%2 денег)").arg(info).arg(cost), "success"};
+    }
+    m_state.energy -= 18;
+    advanceTime(180);
+    return {"Миграция провалилась! Потеря данных. (-18 энергии)", "error"};
+}
+
+QPair<QString,QString> GameController::cmdAudit() {
+    if (m_state.energy < 20) return {"Слишком устал для аудита!", "warning"};
+    int cost = SkillSystem::auditCost(m_state);
+    if (m_state.money < cost) return {QString("Недостаточно денег! (%1)").arg(cost), "warning"};
+    QString info = SkillSystem::improveRandom(m_state, {"security"}, 0.3, 0.6);
+    m_state.money  -= cost;
+    m_state.xp     += 25;
+    m_state.energy -= 20;
+    advanceTime(180);
+    return {QString("Аудит безопасности завершён! %1, +25 опыта (-%2 денег)").arg(info).arg(cost), "success"};
+}
+
+QPair<QString,QString> GameController::cmdSave()
+{
+    if (SaveManager::save(m_state))
+        return {"Игра сохранена", "success"};
+
+    return {"Ошибка сохранения", "error"};
+}
+
+QPair<QString,QString> GameController::cmdLoad()
+{
+    if (SaveManager::load(m_state))
+    {
+        if (m_state.guiUnlocked)
+            emit guiUnlocked();
+
+        emit stateChanged();
+
+        return {"Игра загружена", "success"};
+    }
+
+    return {"Файл сохранения не найден", "error"};
+
+}
+
+void GameController::checkLevelUp() {
+    if (m_state.xp < m_state.level * 100) return;
+    int old = m_state.level;
+    m_state.level++;
+    m_state.xp = 0;
+    QString bonus;
+    if (m_state.level % 5 == 0) {
+        m_state.maxConcurrentProjects++;
+        m_state.maxQueueSize += 2;
+        m_state.maxEnergy    += 20;
+        bonus = ", +1 к макс. проектам, +2 к очереди, +20 энергии";
+    } else {
+        m_state.maxEnergy += 10;
+        bonus = ", +10 энергии";
+    }
+    m_state.energy = m_state.maxEnergy;
+    if (m_state.level > m_state.maxLevel) {
+        m_state.level = m_state.maxLevel;
+        emit_msg(QString("Достигнут максимальный уровень %1!").arg(m_state.maxLevel), "highlight");
+    } else {
+        emit_msg(QString("Уровень повышен! %1 → %2%3").arg(old).arg(m_state.level).arg(bonus), "highlight");
+        emit levelUp(m_state.level);
+    }
+}
+
+void GameController::updateProjectQueue() {
+    double chance = 0.3 + (m_state.reputation / 1000.0);
+    if (QRandomGenerator::global()->generateDouble() < chance
+        && m_state.projectQueue.size() < m_state.maxQueueSize) {
+        Project p = ProjectQueue::generateProject(m_state.level);
+        m_state.projectQueue.enqueue(p);
+        emit_msg(QString("Новый проект в очереди: %1").arg(p.name));
+    }
+}
+
+void GameController::handleRandomEvent() {
+    double meetingChance = 0.05 - qMin(0.03, m_state.reputation / 2000.0);
+    double r = QRandomGenerator::global()->generateDouble();
+
+    if (r < meetingChance) {
+        int loss = QRandomGenerator::global()->bounded(15, 26);
+        m_state.energy = qMax(0, m_state.energy - loss);
+        emit_msg(QString("Внезапный митинг! -%1 энергии").arg(loss), "warning");
+    } else if (r < meetingChance + 0.04) {
+        if (!m_state.currentProjects.isEmpty()) {
+            Project p = m_state.currentProjects.dequeue();
+            m_state.projectQueue.prepend(p);
+            emit_msg("Срочный баг-репорт! Проект отложен.", "warning");
+        }
+    } else if (r < meetingChance + 0.04 + 0.03 + m_state.reputation / 3000.0) {
+        int bonus = int(QRandomGenerator::global()->bounded(150, 601) * SkillSystem::reputationBonus(m_state));
+        m_state.money += bonus;
+        emit_msg(QString("Неожиданный бонус! +%1 денег").arg(bonus), "success");
+    } else if (r < meetingChance + 0.09 + m_state.reputation / 3000.0) {
+        if (!m_state.currentProjects.isEmpty()) {
+            int loss = QRandomGenerator::global()->bounded(20, 31);
+            m_state.energy = qMax(0, m_state.energy - loss);
+            emit_msg(QString("Срочная проблема в проекте! -%1 энергии").arg(loss), "error");
+        }
+    }
+}
+
+void GameController::onGameTick()
+{
+    advanceTime(1);
+
+    if (m_state.gameMinutes % 5 == 0)
+    {
+        SaveManager::save(m_state);
+    }
+
+    emit stateChanged();
+}

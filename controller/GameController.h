@@ -30,6 +30,8 @@ private:
 
     void advanceTime(int minutes);
 
+    void checkPromotion();
+
     QPair<QString,QString> cmdStart();
     QPair<QString,QString> cmdWork();
     QPair<QString,QString> cmdBugs();
@@ -53,6 +55,7 @@ private:
     void checkLevelUp();
     void updateProjectQueue();
     void handleRandomEvent();
+    void updateBurnout(int delta);
 
     void emit_msg(const QString &text, const QString &type = "text");
 };

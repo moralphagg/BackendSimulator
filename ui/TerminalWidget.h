@@ -18,11 +18,16 @@ signals:
 private slots:
     void onReturnPressed();
 
+bool eventFilter(QObject *obj, QEvent *event) override;
+
 private:
     QScrollArea  *m_scroll;
     QWidget      *m_msgContainer;
     QVBoxLayout  *m_msgLayout;
     QLineEdit    *m_input;
+    QLabel *m_prompt;
+    QStringList m_history;
+    int m_historyIndex = -1;
 
     void appendLabel(const QString &text, const QString &colorHex);
     void scrollToBottom();

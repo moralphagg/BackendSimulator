@@ -5,6 +5,7 @@
 #include "../core/SaveManager.h"
 #include <QRandomGenerator>
 #include <QDateTime>
+#include "../core/CareerData.h"
 
 GameController::GameController(QObject *parent)
     : QObject(parent)
@@ -14,6 +15,9 @@ GameController::GameController(QObject *parent)
         m_state.initSkills();
         ProjectQueue::refill(m_state);
     }
+
+    m_state.currentJob     = CareerData::jobInfo(JobTitle::Freelancer);
+    m_state.currentCompany = CareerData::companyInfo(CompanyType::None);
 
     emit_msg("Запуск симулятора бэкенд-разработчика!", "highlight");
     emit_msg("Введите команду для начала работы...");
@@ -119,6 +123,7 @@ void GameController::postCommand(const QString &cmd) {
         emit_msg(result.first, result.second);
 
     checkLevelUp();
+    checkPromotion();
     updateProjectQueue();
     handleRandomEvent();
 
@@ -144,6 +149,7 @@ QPair<QString,QString> GameController::cmdStart() {
     m_state.energy -= 25;
 
     advanceTime(30);
+    updateBurnout(-1);
 
     return {QString("Начал проект: %1 (-25 энергии)").arg(p.name), "success"};
 }
@@ -151,54 +157,39 @@ QPair<QString,QString> GameController::cmdStart() {
 QPair<QString,QString> GameController::cmdWork()
 {
     if (m_state.currentProjects.isEmpty())
-    {
         return {"Нет активного проекта", "warning"};
-    }
 
     if (m_state.energy < 15)
-    {
-        return {"Слишком устал", "warning"};
-    }
+        return {"Слишком устал для работы. Отдохни.", "warning"};
 
-    Project &p =
-        m_state.currentProjects.head();
+    Project &p = m_state.currentProjects.head();
 
-    int progressGain =
-        QRandomGenerator::global()
-            ->bounded(5, 15);
+    double burnoutPenalty = 1.0 - (m_state.burnout / 150.0);
 
-    progressGain =
-        qMax(
-            1,
-            progressGain - p.difficulty
-            );
+    double speedBonus = m_state.currentJob.workSpeedBonus;
 
-    p.progress += progressGain;
+    int progressGain = QRandomGenerator::global()->bounded(5, 15);
+    progressGain = qMax(1, int(progressGain * speedBonus * burnoutPenalty) - p.difficulty);
 
-    if (p.progress > 100)
-        p.progress = 100;
-
+    p.progress = qMin(100, p.progress + progressGain);
     m_state.energy -= 20;
-
     advanceTime(120);
+    updateBurnout(+5);
 
-    if (
-        QRandomGenerator::global()
-            ->bounded(100)
-        < 25
-        )
-    {
-        p.bugs +=
-            QRandomGenerator::global()
-                ->bounded(1, 4);
-    }
+    int bugChance = 25;
+    if (m_state.burnout >= 70)
+        bugChance = 55;
+    else if (m_state.burnout >= 40)
+        bugChance = 35;
+
+    if (QRandomGenerator::global()->bounded(100) < bugChance)
+        p.bugs += QRandomGenerator::global()->bounded(1, 4);
 
     return {
-        QString(
-            "%1\nПрогресс: %2%\nБагов: %3"
-            )
+        QString("%1\nПрогресс: %2% (+%3)\nБагов: %4")
             .arg(p.name)
             .arg(p.progress)
+            .arg(progressGain)
             .arg(p.bugs),
         "success"
     };
@@ -242,6 +233,7 @@ QPair<QString,QString> GameController::cmdBugs()
     m_state.energy -= 15;
 
     advanceTime(60);
+    updateBurnout(+10);
 
     m_state.skills["debugging"] +=
         0.1 *
@@ -267,6 +259,7 @@ QPair<QString,QString> GameController::cmdLearn() {
     m_state.money  -= cost;
     m_state.energy -= 20;
     advanceTime(180);
+    updateBurnout(+10);
     return {QString("Прокачал %1 (-%2 денег)").arg(info).arg(cost), "success"};
 }
 
@@ -274,6 +267,7 @@ QPair<QString,QString> GameController::cmdRest() {
     int gain = QRandomGenerator::global()->bounded(25, 46);
     m_state.energy = qMin(m_state.maxEnergy, m_state.energy + gain);
     advanceTime(480);
+    updateBurnout(-10);
     return {QString("Отдохнул: +%1 энергии").arg(gain), "success"};
 }
 
@@ -376,6 +370,7 @@ QPair<QString,QString> GameController::cmdDeploy() {
     advanceTime(
         p.difficulty * 30
         );
+    updateBurnout(-1);
 
     m_state.currentProjects.dequeue();
 
@@ -395,6 +390,7 @@ QPair<QString,QString> GameController::cmdOptimize() {
     QString info = SkillSystem::improveRandom(m_state, {"python","debugging"}, 0.1, 0.3);
     m_state.xp     += 8;
     m_state.energy -= 18;
+    updateBurnout(+3);
 
     advanceTime(60);
 
@@ -407,6 +403,7 @@ QPair<QString,QString> GameController::cmdMeeting() {
     int xp    = QRandomGenerator::global()->bounded(5, 11);
     m_state.energy -= eLoss;
     advanceTime(90);
+    updateBurnout(+3);
     m_state.xp     += xp;
     m_state.skills["api_design"] += 0.1 * SkillSystem::skillBonusMultiplier(m_state);
     return {QString("Митинг проведён. -%1 энергии, +%2 опыта").arg(eLoss).arg(xp), "text"};
@@ -422,6 +419,7 @@ QPair<QString,QString> GameController::cmdResearch() {
     m_state.money  -= cost;
     m_state.energy -= 45;
     advanceTime(240);
+    updateBurnout(+6);
     m_state.xp     += 36;
     return {QString("Исследование завершено! %1, -%2 денег").arg(info).arg(cost), "success"};
 }
@@ -437,6 +435,7 @@ QPair<QString,QString> GameController::cmdMentor() {
     m_state.money      -= cost;
     m_state.energy     -= 35;
     advanceTime(120);
+    updateBurnout(+8);
     return {QString("Менторинг завершён! +%1 опыта, +%2 репутации (-%3 денег)").arg(xp).arg(rep).arg(cost), "success"};
 }
 
@@ -458,6 +457,7 @@ QPair<QString,QString> GameController::cmdFreelance()
     m_state.energy -= 15;
 
     advanceTime(180);
+    updateBurnout(+3);
 
     return {
         QString(
@@ -475,6 +475,7 @@ QPair<QString,QString> GameController::cmdRefactor() {
     m_state.xp     += 10;
     m_state.energy -= 20;
     advanceTime(150);
+    updateBurnout(+3);
     return {QString("Рефакторинг завершён! %1, +10 опыта").arg(info), "success"};
 }
 
@@ -486,6 +487,7 @@ QPair<QString,QString> GameController::cmdDocument() {
     m_state.xp     += xp;
     m_state.energy -= 12;
     advanceTime(90);
+    updateBurnout(+2);
     return {QString("Документация написана! +%1 денег, +%2 опыта").arg(money).arg(xp), "success"};
 }
 
@@ -495,6 +497,7 @@ QPair<QString,QString> GameController::cmdAnalyze() {
     m_state.xp     += 7;
     m_state.energy -= 35;
     advanceTime(120);
+    updateBurnout(+3);
     return {QString("Анализ производительности завершён! %1, +7 опыта").arg(info), "success"};
 }
 
@@ -507,6 +510,7 @@ QPair<QString,QString> GameController::cmdScale() {
     m_state.xp     += 20;
     m_state.energy -= 55;
     advanceTime(270);
+    updateBurnout(+4);
     return {QString("Система масштабирована! %1, +20 опыта (-%2 денег)").arg(info).arg(cost), "success"};
 }
 
@@ -520,10 +524,12 @@ QPair<QString,QString> GameController::cmdMigrate() {
         m_state.xp     += 18;
         m_state.energy -= 22;
         advanceTime(180);
+        updateBurnout(+5);
         return {QString("Миграция базы успешна! %1, +18 опыта (-%2 денег)").arg(info).arg(cost), "success"};
     }
     m_state.energy -= 18;
     advanceTime(180);
+    updateBurnout(+7);
     return {"Миграция провалилась! Потеря данных. (-18 энергии)", "error"};
 }
 
@@ -536,6 +542,7 @@ QPair<QString,QString> GameController::cmdAudit() {
     m_state.xp     += 25;
     m_state.energy -= 20;
     advanceTime(180);
+    updateBurnout(+4);
     return {QString("Аудит безопасности завершён! %1, +25 опыта (-%2 денег)").arg(info).arg(cost), "success"};
 }
 
@@ -635,4 +642,32 @@ void GameController::onGameTick()
     }
 
     emit stateChanged();
+}
+
+void GameController::checkPromotion()
+{
+    JobTitle best = CareerData::nextTitle(m_state);
+
+    if (best > m_state.currentJob.title)
+    {
+        JobInfo newJob = CareerData::jobInfo(best);
+        emit_msg(
+            QString("Повышение! %1 → %2 (+%3 к зарплате/день)")
+                .arg(m_state.currentJob.displayName)
+                .arg(newJob.displayName)
+                .arg(newJob.salaryBonus - m_state.currentJob.salaryBonus),
+            "highlight"
+            );
+        m_state.currentJob = newJob;
+    }
+}
+
+void GameController::updateBurnout(int delta)
+{
+    m_state.burnout = qBound(0, m_state.burnout + delta, m_state.maxBurnout);
+
+    if (delta > 0 && m_state.burnout >= 70)
+        emit_msg("Ты сильно устал. Производительность падает.", "warning");
+    else if (delta > 0 && m_state.burnout >= 40)
+        emit_msg("Чувствуешь усталость.", "warning");
 }

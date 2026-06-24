@@ -3,7 +3,6 @@
 
 class CheatEngine {
 public:
-    // Возвращает сообщение если чит-код сработал, иначе пустую строку
     static QString check(GameState &state, const QString &input);
 
 private:

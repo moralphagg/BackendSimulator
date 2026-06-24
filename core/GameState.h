@@ -3,6 +3,7 @@
 #include <QMap>
 #include <QQueue>
 #include <QDateTime>
+#include "CareerTypes.h"
 
 struct Project
 {
@@ -20,6 +21,8 @@ struct Project
     int bugs = 0;
 
     bool readyForDeploy = false;
+
+    int deadlineDay = 0;
 };
 
 struct GameState {
@@ -50,6 +53,15 @@ struct GameState {
     QMap<QString, double> skills;
 
     bool guiUnlocked = false;
+
+    int burnout    = 0;
+    int maxBurnout = 100;
+
+    JobInfo     currentJob;
+    CompanyInfo currentCompany;
+
+    int deadlinesMissed  = 0;
+    int deadlinesMet     = 0;
 
     void initSkills() {
         const QStringList names = {

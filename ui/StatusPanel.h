@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QWidget>
+#include <QProgressBar>
 
 class QLabel;
 
@@ -25,6 +26,8 @@ public:
         int hour,
         int minute
         );
+    void setJob(const QString &title, const QString &company);
+    void setBurnout(int value, int max);
 
 private:
     QLabel *levelLabel;
@@ -37,4 +40,7 @@ private:
     QLabel *activeProjectsLabel;
     QLabel *queueLabel;
     QLabel *timeLabel;
+    QLabel *jobLabel;
+    QLabel *companyLabel;
+    QProgressBar *burnoutBar;
 };

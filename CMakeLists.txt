@@ -21,6 +21,10 @@ qt_add_executable(BackendSimulator
     core/CheatEngine.cpp
     core/SaveManager.h
     core/SaveManager.cpp
+    core/CareerData.h
+    core/CareerData.cpp
+    core/CareerTypes.h
+    core/CareerTypes.cpp
     controller/GameController.h
     controller/GameController.cpp
     ui/MainWindow.h

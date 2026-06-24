@@ -2,6 +2,7 @@
 
 #include <QVBoxLayout>
 #include <QLabel>
+#include <QProgressBar>
 
 StatusPanel::StatusPanel(QWidget *parent)
     : QWidget(parent)
@@ -17,6 +18,18 @@ StatusPanel::StatusPanel(QWidget *parent)
     bugsFixedLabel         = new QLabel("Багов: 0");
     activeProjectsLabel    = new QLabel("Активных: 0/1");
     queueLabel             = new QLabel("Очередь: 0/5");
+    jobLabel               = new QLabel("Должность: Фрилансер");
+    companyLabel           = new QLabel("Компания: —");
+    burnoutBar             = new QProgressBar();
+
+    burnoutBar->setRange(0, 100);
+    burnoutBar->setValue(0);
+    burnoutBar->setTextVisible(false);
+    burnoutBar->setFixedHeight(6);
+    burnoutBar->setStyleSheet(
+        "QProgressBar { background: #333; border-radius: 3px; }"
+        "QProgressBar::chunk { background: #f78166; border-radius: 3px; }"
+        );
 
     timeLabel =
         new QLabel(
@@ -34,6 +47,10 @@ StatusPanel::StatusPanel(QWidget *parent)
     layout->addWidget(activeProjectsLabel);
     layout->addWidget(queueLabel);
     layout->addStretch();
+    layout->addWidget(jobLabel);
+    layout->addWidget(companyLabel);
+    layout->addWidget(new QLabel("Выгорание:"));
+    layout->addWidget(burnoutBar);
 }
 
 void StatusPanel::setLevel(int value, int maxLevel) {
@@ -93,4 +110,29 @@ void StatusPanel::setActiveProjects(int current, int max) {
 
 void StatusPanel::setQueue(int current, int max) {
     queueLabel->setText(QString("Очередь: %1/%2").arg(current).arg(max));
+}
+
+void StatusPanel::setJob(const QString &title, const QString &company)
+{
+    jobLabel->setText("Должность: " + title);
+    companyLabel->setText("Компания: " + company);
+}
+
+void StatusPanel::setBurnout(int value, int max)
+{
+    burnoutBar->setMaximum(max);
+    burnoutBar->setValue(value);
+
+    QString color;
+    if (value < 40)
+        color = "#3fb950";
+    else if (value < 70)
+        color = "#d29922";
+    else
+        color = "#f78166";
+
+    burnoutBar->setStyleSheet(QString(
+                                  "QProgressBar { background: #333; border-radius: 3px; }"
+                                  "QProgressBar::chunk { background: %1; border-radius: 3px; }"
+                                  ).arg(color));
 }

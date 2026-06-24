@@ -153,6 +153,12 @@ void MainWindow::updateUi()
         state.gameMinutes
         );
 
+    statusPanel->setJob(
+        state.currentJob.displayName,
+        state.currentCompany.name.isEmpty() ? "—" : state.currentCompany.name
+        );
+    statusPanel->setBurnout(state.burnout, state.maxBurnout);
+
     projectsPanel->clear();
 
     for (const auto &project : state.currentProjects)

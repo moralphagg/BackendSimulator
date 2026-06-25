@@ -5,30 +5,37 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QDateTime>
+#include "CareerData.h"
 
 static QJsonObject projectToJson(const Project& p)
 {
     QJsonObject obj;
-
-    obj["name"] = p.name;
-    obj["difficulty"] = p.difficulty;
-    obj["reward"] = p.reward;
-    obj["time"] = p.time;
-    obj["progress"] = p.progress;
-
+    obj["name"]        = p.name;
+    obj["category"]    = p.category;
+    obj["difficulty"]  = p.difficulty;
+    obj["reward"]      = p.reward;
+    obj["time"]        = p.time;
+    obj["progress"]    = p.progress;
+    obj["maxProgress"] = p.maxProgress;
+    obj["bugs"]        = p.bugs;
+    obj["deadlineDay"] = p.deadlineDay;
+    obj["readyForDeploy"] = p.readyForDeploy;
     return obj;
 }
 
 static Project projectFromJson(const QJsonObject& obj)
 {
     Project p;
-
-    p.name = obj["name"].toString();
-    p.difficulty = obj["difficulty"].toInt();
-    p.reward = obj["reward"].toInt();
-    p.time = obj["time"].toInt();
-    p.progress = obj["progress"].toInt();
-
+    p.name           = obj["name"].toString();
+    p.category       = obj["category"].toString();
+    p.difficulty     = obj["difficulty"].toInt();
+    p.reward         = obj["reward"].toInt();
+    p.time           = obj["time"].toInt();
+    p.progress       = obj["progress"].toInt();
+    p.maxProgress    = obj["maxProgress"].toInt(100);
+    p.bugs           = obj["bugs"].toInt();
+    p.deadlineDay    = obj["deadlineDay"].toInt(0);
+    p.readyForDeploy = obj["readyForDeploy"].toBool(false);
     return p;
 }
 
@@ -36,18 +43,31 @@ bool SaveManager::save(const GameState& state)
 {
     QJsonObject root;
 
-    root["level"] = state.level;
-    root["xp"] = state.xp;
-    root["money"] = state.money;
-    root["energy"] = state.energy;
-    root["reputation"] = state.reputation;
-    root["maxEnergy"] = state.maxEnergy;
-    root["projectsCompleted"] = state.projectsCompleted;
-    root["bugsFixed"] = state.bugsFixed;
-    root["guiUnlocked"] = state.guiUnlocked;
-    root["gameDay"] = state.gameDay;
-    root["gameHours"] = state.gameHours;
-    root["gameMinutes"] = state.gameMinutes;
+    root["level"]                   = state.level;
+    root["xp"]                      = state.xp;
+    root["money"]                   = state.money;
+    root["energy"]                  = state.energy;
+    root["reputation"]              = state.reputation;
+    root["maxEnergy"]               = state.maxEnergy;
+    root["projectsCompleted"]       = state.projectsCompleted;
+    root["bugsFixed"]               = state.bugsFixed;
+    root["guiUnlocked"]             = state.guiUnlocked;
+    root["gameDay"]                 = state.gameDay;
+    root["gameHours"]               = state.gameHours;
+    root["gameMinutes"]             = state.gameMinutes;
+    root["burnout"]                 = state.burnout;
+    root["maxBurnout"]              = state.maxBurnout;
+    root["deadlinesMissed"]         = state.deadlinesMissed;
+    root["deadlinesMet"]            = state.deadlinesMet;
+    root["jobTitle"]                = static_cast<int>(state.currentJob.title);
+    root["jobSalaryBonus"]          = state.currentJob.salaryBonus;
+    root["jobSpeedBonus"]           = state.currentJob.workSpeedBonus;
+    root["jobDisplayName"]          = state.currentJob.displayName;
+    root["companyType"]             = static_cast<int>(state.currentCompany.type);
+    root["companyName"]             = state.currentCompany.name;
+    root["companySalaryPerDay"]     = state.currentCompany.salaryPerDay;
+    root["companyDeadlineMult"]     = state.currentCompany.deadlineMultiplier;
+    root["companyRepMult"]          = state.currentCompany.reputationMultiplier;
 
     root["maxConcurrentProjects"] =
         state.maxConcurrentProjects;
@@ -143,11 +163,33 @@ bool SaveManager::load(GameState& state)
     state.gameMinutes =
         root["gameMinutes"].toInt(0);
 
+    state.burnout    =
+        root["burnout"].toInt(0);
+
+    state.maxBurnout =
+        root["maxBurnout"].toInt(100);
+
+    state.deadlinesMissed =
+        root["deadlinesMissed"].toInt(0);
+
+    state.deadlinesMet    =
+        root["deadlinesMet"].toInt(0);
+
     state.maxConcurrentProjects =
         root["maxConcurrentProjects"].toInt(1);
 
     state.maxQueueSize =
         root["maxQueueSize"].toInt(5);
+
+    {
+        auto title = static_cast<JobTitle>(root["jobTitle"].toInt(1));
+        state.currentJob = CareerData::jobInfo(title);
+    }
+
+    {
+        auto type = static_cast<CompanyType>(root["companyType"].toInt(0));
+        state.currentCompany = CareerData::companyInfo(type);
+    }
 
     state.skills.clear();
 

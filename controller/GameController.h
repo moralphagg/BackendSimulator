@@ -65,10 +65,14 @@ private:
     QPair<QString,QString> cmdScale();
     QPair<QString,QString> cmdMigrate();
     QPair<QString,QString> cmdAudit();
+    QPair<QString,QString> cmdBuy(const QString &item);
+    QPair<QString,QString> cmdLaundry();
+    QPair<QString,QString> cmdWalk();
+    QPair<QString,QString> cmdClean();
+    QPair<QString,QString> cmdSchedule();
     QPair<QString,QString> cmdSave();
     QPair<QString,QString> cmdLoad();
     QPair<QString,QString> cmdFreelance();
-    QPair<QString,QString> cmdBuy(const QString &item);
 
     void checkLevelUp();
     void updateProjectQueue();
@@ -76,4 +80,12 @@ private:
     void updateBurnout(int delta);
 
     void emit_msg(const QString &text, const QString &type = "text");
+
+    void generateWeekSchedule();
+    void checkStudyEvents();
+    void triggerStudyEvent(StudyEvent &e);
+    void checkSessionStart();
+    void checkExpulsion();
+
+    void handleExam(const StudyEvent &e);
 };

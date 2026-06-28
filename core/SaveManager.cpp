@@ -6,6 +6,7 @@
 #include <QJsonArray>
 #include <QDateTime>
 #include "CareerData.h"
+#include "CareerTypes.h"
 
 static QJsonObject projectToJson(const Project& p)
 {
@@ -84,6 +85,34 @@ bool SaveManager::save(const GameState& state)
     root["sleepDebt"]               = state.sleepDebt;
     root["lastSleepDay"]            = state.lastSleepDay;
     root["sleptTonight"]            = state.sleptTonight;
+    root["semester"]                = state.semester;
+    root["academicDay"]             = state.academicDay;
+    root["labsCompleted"]           = state.labsCompleted;
+    root["labsRequired"]            = state.labsRequired;
+    root["sessionActive"]           = state.sessionActive;
+    root["sessionPassed"]           = state.sessionPassed;
+    root["failedExams"]             = state.failedExams;
+    root["pendingLab"]              = state.pendingLab;
+    root["pendingLabSubject"]       = state.pendingLabSubject;
+    QJsonArray scheduleArr;
+    for (const auto &e : state.schedule)
+    {
+        QJsonObject obj;
+        obj["type"]      = static_cast<int>(e.type);
+        obj["day"]       = e.day;
+        obj["hour"]      = e.hour;
+        obj["subject"]   = e.subject;
+        obj["attended"]  = e.attended;
+        obj["completed"] = e.completed;
+        scheduleArr.append(obj);
+    }
+    root["schedule"] = scheduleArr;
+    root["foodStock"]       = state.foodStock;
+    root["daysWithoutFood"] = state.daysWithoutFood;
+    root["laundryPending"]  = state.laundryPending;
+    root["laundryDays"]     = state.laundryDays;
+    root["roomMessLevel"]   = state.roomMessLevel;
+    root["daysIndoor"]      = state.daysIndoor;
 
     root["maxConcurrentProjects"] =
         state.maxConcurrentProjects;
@@ -224,17 +253,26 @@ bool SaveManager::load(GameState& state)
     state.sleptTonight =
         root["sleptTonight"].toBool(false);
 
-    state.lifeStage     = static_cast<LifeStage>(root["lifeStage"].toInt(0));
-    state.housingType   = static_cast<HousingType>(root["housingType"].toInt(0));
+    state.lifeStage     =
+        static_cast<LifeStage>(root["lifeStage"].toInt(0));
+    state.housingType   =
+        static_cast<HousingType>(root["housingType"].toInt(0));
     state.equipment     = CareerData::equipmentInfo(
         static_cast<EquipmentTier>(root["equipmentTier"].toInt(0)));
-    state.rentCost      = root["rentCost"].toInt(3000);
-    state.foodCost      = root["foodCost"].toInt(50);
-    state.debt          = root["debt"].toInt(0);
-    state.semesterDay   = root["semesterDay"].toInt(1);
-    state.studyScore    = root["studyScore"].toInt(100);
-    state.expelled      = root["expelled"].toBool(false);
-    state.missedRentCount = root["missedRentCount"].toInt(0);
+    state.rentCost      =
+        root["rentCost"].toInt(3000);
+    state.foodCost      =
+        root["foodCost"].toInt(50);
+    state.debt          =
+        root["debt"].toInt(0);
+    state.semesterDay   =
+        root["semesterDay"].toInt(1);
+    state.studyScore    =
+        root["studyScore"].toInt(100);
+    state.expelled      =
+        root["expelled"].toBool(false);
+    state.missedRentCount =
+        root["missedRentCount"].toInt(0);
 
     {
         auto title = static_cast<JobTitle>(root["jobTitle"].toInt(1));
@@ -245,6 +283,46 @@ bool SaveManager::load(GameState& state)
         auto type = static_cast<CompanyType>(root["companyType"].toInt(0));
         state.currentCompany = CareerData::companyInfo(type);
     }
+
+    state.semester      =
+        root["semester"].toInt(1);
+    state.academicDay   =
+        root["academicDay"].toInt(1);
+    state.labsCompleted =
+        root["labsCompleted"].toInt(0);
+    state.labsRequired  =
+        root["labsRequired"].toInt(3);
+    state.sessionActive =
+        root["sessionActive"].toBool(false);
+    state.sessionPassed =
+        root["sessionPassed"].toBool(false);
+    state.failedExams   =
+        root["failedExams"].toInt(0);
+    state.pendingLab =
+        root["pendingLab"].toBool(false);
+    state.pendingLabSubject =
+        root["pendingLabSubject"].toString();
+    state.schedule.clear();
+    QJsonArray scheduleArr = root["schedule"].toArray();
+    for (const auto &val : scheduleArr)
+    {
+        QJsonObject obj = val.toObject();
+        StudyEvent e;
+        e.type      = static_cast<StudyEventType>(obj["type"].toInt());
+        e.day       = obj["day"].toInt();
+        e.hour      = obj["hour"].toInt();
+        e.subject   = obj["subject"].toString();
+        e.attended  = obj["attended"].toBool(false);
+        e.completed = obj["completed"].toBool(false);
+        state.schedule.append(e);
+    }
+    state.foodStock       = root["foodStock"].toInt(3);
+    state.daysWithoutFood = root["daysWithoutFood"].toInt(0);
+    state.laundryPending  = root["laundryPending"].toBool(false);
+    state.laundryDays     = root["laundryDays"].toInt(0);
+    state.roomMessLevel   = root["roomMessLevel"].toInt(0);
+    state.daysIndoor      = root["daysIndoor"].toInt(0);
+
 
     state.skills.clear();
 

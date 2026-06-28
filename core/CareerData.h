@@ -10,4 +10,5 @@ public:
     static JobTitle    nextTitle(const GameState &s);
     static bool        canJoin(const GameState &s, CompanyType type);
     static Equipment equipmentInfo(EquipmentTier tier);
+    static QStringList csSubjects();
 };

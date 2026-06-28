@@ -56,6 +56,9 @@ struct GameState {
 
     bool pendingIncident = false;
 
+    bool    pendingLab        = false;
+    QString pendingLabSubject;
+
     int burnout    = 0;
     int maxBurnout = 100;
 
@@ -87,7 +90,23 @@ struct GameState {
     int   studyScore      = 100;
     bool  expelled        = false;
 
+    int  semester        = 1;
+    int  academicDay     = 1;
+    int  labsCompleted   = 0;
+    int  labsRequired    = 3;
+    bool sessionActive   = false;
+    bool sessionPassed   = false;
+    int  failedExams     = 0;
+    QList<StudyEvent> schedule;
+
     int   missedRentCount = 0;
+
+    int  foodStock        = 3;
+    int  daysWithoutFood  = 0;
+    bool laundryPending   = false;
+    int  laundryDays      = 0;
+    int  roomMessLevel    = 0;
+    int  daysIndoor       = 0;
 
     void initSkills() {
         const QStringList names = {

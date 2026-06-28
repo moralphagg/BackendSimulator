@@ -128,6 +128,9 @@ void GameController::postCommand(const QString &cmd) {
     else if (cmd == "rest")           result = cmdRest();
     else if (cmd == "sleep")          result = cmdSleep();
     else if (cmd.startsWith("buy "))  result = cmdBuy(cmd.mid(4).trimmed());
+    else if (cmd == "laundry")        result = cmdLaundry();
+    else if (cmd == "walk")           result = cmdWalk();
+    else if (cmd == "clean")          result = cmdClean();
     else if (cmd == "deploy")         result = cmdDeploy();
     else if (cmd == "optimize")       result = cmdOptimize();
     else if (cmd == "meeting")        result = cmdMeeting();
@@ -140,6 +143,32 @@ void GameController::postCommand(const QString &cmd) {
     else if (cmd == "scale")          result = cmdScale();
     else if (cmd == "migrate")        result = cmdMigrate();
     else if (cmd == "audit")          result = cmdAudit();
+    else if (cmd == "schedule")       result = cmdSchedule();
+    else if (cmd == "submit")
+    {
+        if (!m_state.pendingLab)
+        {
+            emit_msg("Нет активной лабы для сдачи.", "warning");
+            return;
+        }
+        if (m_state.energy < 20)
+        {
+            emit_msg("Слишком устал чтобы сдать лабу. Отдохни.", "warning");
+            return;
+        }
+        m_state.energy -= 20;
+        m_state.labsCompleted++;
+        m_state.pendingLab = false;
+        m_state.studyScore = qMin(100, m_state.studyScore + 5);
+        emit_msg(
+            QString("Сдал лабу по \"%1\"! +5 успеваемости. "
+                    "Сдано лаб: %2/%3")
+                .arg(m_state.pendingLabSubject)
+                .arg(m_state.labsCompleted)
+                .arg(m_state.labsRequired),
+            "success"
+            );
+    }
     else if (cmd == "clear")          { emit_msg("__clear__"); return; }
     else if (cmd == "save")           result = cmdSave();
     else if (cmd == "load")           result = cmdLoad();
@@ -724,6 +753,39 @@ QPair<QString,QString> GameController::cmdAudit() {
     return {QString("Аудит безопасности завершён! %1, +25 опыта (-%2 денег)").arg(info).arg(cost), "success"};
 }
 
+QPair<QString,QString> GameController::cmdSchedule()
+{
+    if (m_state.lifeStage != LifeStage::Student)
+        return {"Ты уже не студент.", "warning"};
+
+    if (m_state.schedule.isEmpty())
+        return {"Расписание пусто.", "warning"};
+
+    QString out = QString("── Расписание (успеваемость: %1/100) ──\n")
+                      .arg(m_state.studyScore);
+
+    for (const auto &e : m_state.schedule)
+    {
+        if (e.attended) continue;
+
+        QString typeName;
+        switch (e.type) {
+        case StudyEventType::Lecture:  typeName = "Лекция";   break;
+        case StudyEventType::Practice: typeName = "Практика"; break;
+        case StudyEventType::Lab:      typeName = "Лаба";  break;
+        case StudyEventType::Exam:     typeName = "ЭКЗАМЕН"; break;
+        }
+
+        out += QString("День %1 %2:00 — %3: %4\n")
+                   .arg(e.day)
+                   .arg(e.hour, 2, 10, QChar('0'))
+                   .arg(typeName)
+                   .arg(e.subject);
+    }
+
+    return {out.trimmed(), "text"};
+}
+
 QPair<QString,QString> GameController::cmdBuy(const QString &item)
 {
     auto withNDS = [&](int price) {
@@ -732,12 +794,22 @@ QPair<QString,QString> GameController::cmdBuy(const QString &item)
 
     if (item == "food")
     {
-        int cost = withNDS(500);
+        int cost = withNDS(800);
         if (m_state.money < cost)
             return {QString("Нет денег. Нужно %1").arg(cost), "error"};
+
         m_state.money -= cost;
-        m_state.energy = qMin(m_state.maxEnergy, m_state.energy + 30);
-        return {QString("Купил еды (+30 энергии, -%1 с НДС)").arg(cost), "success"};
+        m_state.foodStock       = qMin(7, m_state.foodStock + 3);
+        m_state.daysWithoutFood = 0;
+        m_state.energy = qMin(m_state.maxEnergy, m_state.energy + 20);
+
+        return {
+            QString("Купил продукты (+3 дня еды, +20 энергии, -%1 с НДС)."
+                    " Запас: %2 дн.")
+                .arg(cost)
+                .arg(m_state.foodStock),
+            "success"
+        };
     }
 
     if (item == "laptop")
@@ -775,6 +847,53 @@ QPair<QString,QString> GameController::cmdBuy(const QString &item)
     }
 
     return {"Неизвестный товар. Доступно: food, laptop, gaming_pc, workstation", "warning"};
+}
+
+QPair<QString,QString> GameController::cmdLaundry()
+{
+    if (!m_state.laundryPending && m_state.laundryDays < 3)
+        return {"Стирать пока не нужно.", "text"};
+
+    int cost = 100;
+    if (m_state.money < cost)
+        return {QString("Нет денег на стирку (%1).").arg(cost), "error"};
+
+    m_state.money      -= cost;
+    m_state.laundryDays = 0;
+    m_state.laundryPending = false;
+    advanceTime(60);
+
+    return {"Постирал вещи. Чувствуешь себя лучше. -60 мин.", "success"};
+}
+
+QPair<QString,QString> GameController::cmdWalk()
+{
+    if (m_state.gameHours < 8 || m_state.gameHours > 21)
+        return {"Поздновато для прогулки.", "warning"};
+
+    m_state.daysIndoor = 0;
+    m_state.energy = qMin(m_state.maxEnergy, m_state.energy + 15);
+    updateBurnout(-5);
+    advanceTime(45);
+
+    return {"Вышел на улицу. +15 энергии, выгорание -5.", "success"};
+}
+
+QPair<QString,QString> GameController::cmdClean()
+{
+    if (m_state.roomMessLevel < 3)
+        return {"В комнате и так чисто.", "text"};
+
+    int cleaned = qMin(m_state.roomMessLevel, 5);
+    m_state.roomMessLevel -= cleaned;
+    m_state.energy = qMax(0, m_state.energy - 10);
+    advanceTime(30);
+
+    return {
+        QString("Убрался в комнате. Уровень беспорядка: %1/10.")
+            .arg(m_state.roomMessLevel),
+        "success"
+    };
 }
 
 QPair<QString,QString> GameController::cmdSave()
@@ -1135,7 +1254,62 @@ void GameController::onNewDay()
         }
     }
 
+    if (m_state.gameDay % 7 == 1)
+        generateWeekSchedule();
+
+    if (m_state.lifeStage == LifeStage::Student)
+    {
+        m_state.academicDay++;
+
+        if ((m_state.academicDay == 135 || m_state.academicDay == 270)
+            && !m_state.sessionActive)
+        {
+            m_state.sessionActive = true;
+            emit_msg(
+                "Началась сессия! Сдай все экзамены.",
+                "error"
+                );
+
+            if (m_state.labsCompleted < m_state.labsRequired)
+            {
+                emit_msg(
+                    QString("Не допущен к сессии! "
+                            "Сдано лаб: %1/%2. Угроза отчисления.")
+                        .arg(m_state.labsCompleted)
+                        .arg(m_state.labsRequired),
+                    "error"
+                    );
+                m_state.failedExams += 2;
+                checkExpulsion();
+            }
+        }
+    }
+
     checkGameOver();
+
+    if (m_state.foodStock > 0)
+    {
+        m_state.foodStock--;
+    }
+    else
+    {
+        m_state.daysWithoutFood++;
+        int penalty = m_state.daysWithoutFood * 10;
+        m_state.energy = qMax(0, m_state.energy - penalty);
+        updateBurnout(+3);
+        emit_msg(
+            QString("Нечего есть уже %1 дн. -%2 энергии. Купи еду!")
+                .arg(m_state.daysWithoutFood)
+                .arg(penalty),
+            "error"
+            );
+    }
+
+    m_state.roomMessLevel = qMin(10, m_state.roomMessLevel + 1);
+
+    m_state.daysIndoor++;
+
+    m_state.laundryDays++;
 
     generateDayEvents();
 }
@@ -1231,6 +1405,82 @@ void GameController::generateDayEvents()
         EventType::HungryAlert, day, 19, false,
         "Снова голоден. Поешь нормально."
     });
+
+    if (m_state.foodStock <= 1)
+    {
+        m_eventQueue.append({
+            EventType::GroceryShopping, day, 10, false,
+            "Еда заканчивается! Купи продукты: buy food"
+        });
+    }
+
+    if (m_state.laundryDays >= 5)
+    {
+        m_eventQueue.append({
+            EventType::LaundryReminder, day, rnd(10, 14), false,
+            "Пора постирать вещи. Введи laundry."
+        });
+    }
+
+    if (m_state.roomMessLevel >= 7)
+    {
+        m_eventQueue.append({
+            EventType::RoomMess, day, rnd(8, 12), false,
+            "В комнате полный хаос. Тяжело сосредоточиться. -10 энергии."
+        });
+    }
+
+    if (m_state.daysIndoor >= 5)
+    {
+        m_eventQueue.append({
+            EventType::HealthCheck, day, 15, false,
+            "Ты не выходил на улицу 5 дней. Витамин D на нуле. -15 энергии."
+        });
+    }
+
+    if (day % 30 == 20)
+    {
+        m_eventQueue.append({
+            EventType::PhoneBill, day, 11, false,
+            "Пришёл счёт за телефон. -300 денег."
+        });
+    }
+
+    if ((m_state.gameDay + 1) % 30 == 0)
+    {
+        m_eventQueue.append({
+            EventType::RentReminder, day, 9, false,
+            QString("Завтра аренда! Нужно %1 денег. На счету: %2")
+                .arg(m_state.rentCost)
+                .arg(m_state.money)
+        });
+    }
+
+    if (m_state.money < m_state.rentCost + 500)
+    {
+        m_eventQueue.append({
+            EventType::LowMoneyAlert, day, 8, false,
+            QString("Денег мало: %1. Скоро аренда %2.")
+                .arg(m_state.money)
+                .arg(m_state.rentCost)
+        });
+    }
+
+    if (m_state.housingType == HousingType::Dorm && rnd(0, 100) < 30)
+    {
+        m_eventQueue.append({
+            EventType::DormNoise, day, rnd(23, 24), false,
+            "Соседи шумят ночью. Плохо заснул. -10 энергии, сон долга +1."
+        });
+    }
+
+    if (m_state.housingType == HousingType::Dorm && rnd(0, 100) < 10)
+    {
+        m_eventQueue.append({
+            EventType::RoommateIssue, day, rnd(18, 22), false,
+            "Конфликт с соседом. Выгорание +5, потеря 30 минут."
+        });
+    }
 }
 
 void GameController::checkTimeEvents()
@@ -1244,6 +1494,8 @@ void GameController::checkTimeEvents()
         e.triggered = true;
         triggerEvent(e);
     }
+
+    checkStudyEvents();
 
     m_eventQueue.removeIf([&](const GameEvent &e){
         return e.triggered ||
@@ -1297,7 +1549,7 @@ void GameController::triggerEvent(const GameEvent &e)
         else
         {
             emit_msg("Нет денег на интернет! Работаешь медленнее.", "error");
-            m_state.sleepDebt += 2; // штраф — не можешь нормально работать
+            m_state.sleepDebt += 2;
         }
         break;
 
@@ -1305,9 +1557,243 @@ void GameController::triggerEvent(const GameEvent &e)
         m_state.energy = qMax(0, m_state.energy - 10);
         break;
 
+    case EventType::GroceryShopping:
+        emit_msg("Купи продукты командой buy food.", "warning");
+        break;
+
+    case EventType::LaundryReminder:
+        emit_msg("Не забудь постирать — введи laundry.", "warning");
+        break;
+
+    case EventType::RoomMess:
+        m_state.energy = qMax(0, m_state.energy - 10);
+        emit_msg("Беспорядок мешает работать.", "error");
+        break;
+
+    case EventType::HealthCheck:
+        m_state.energy = qMax(0, m_state.energy - 15);
+        updateBurnout(+5);
+        emit_msg("Выйди на улицу — введи walk.", "warning");
+        break;
+
+    case EventType::PhoneBill:
+        if (m_state.money >= 300)
+        {
+            m_state.money -= 300;
+            emit_msg("Оплачен телефон: -300.", "text");
+        }
+        else
+        {
+            emit_msg("Нет денег на телефон! Связь отключена.", "error");
+            updateBurnout(+3);
+        }
+        break;
+
+    case EventType::RentReminder:
+
+        break;
+
+    case EventType::LowMoneyAlert:
+
+        break;
+
+    case EventType::DormNoise:
+        m_state.energy  = qMax(0, m_state.energy - 10);
+        m_state.sleepDebt++;
+        break;
+
+    case EventType::RoommateIssue:
+        advanceTime(30);
+        updateBurnout(+5);
+        break;
+
     default:
         break;
     }
 
+
+
+    emit stateChanged();
+}
+
+void GameController::generateWeekSchedule()
+{
+    if (m_state.lifeStage != LifeStage::Student) return;
+
+    m_state.schedule.clear();
+    auto subjects = CareerData::csSubjects();
+    auto rnd = [](int a, int b){
+        return QRandomGenerator::global()->bounded(a, b);
+    };
+
+    int today = m_state.gameDay;
+
+    for (int d = 0; d < 5; d++)
+    {
+        int dayOffset = today + d;
+        int weekDay   = dayOffset % 7;
+
+        if (weekDay == 5 || weekDay == 6) continue;
+
+        QString subj1 = subjects[rnd(0, subjects.size())];
+        QString subj2 = subjects[rnd(0, subjects.size())];
+
+        m_state.schedule.append({
+            StudyEventType::Lecture, dayOffset, 9, subj1
+        });
+
+        bool isLab = (rnd(0, 100) < 35);
+        m_state.schedule.append({
+            isLab ? StudyEventType::Lab : StudyEventType::Practice,
+            dayOffset, 11, subj2
+        });
+    }
+
+    emit_msg(
+        QString("Новое расписание на неделю сгенерировано. "
+                "Введи schedule чтобы посмотреть."),
+        "text"
+        );
+}
+
+void GameController::checkStudyEvents()
+{
+    if (m_state.lifeStage != LifeStage::Student) return;
+
+    for (auto &e : m_state.schedule)
+    {
+        if (e.attended)   continue;
+        if (e.day  != m_state.gameDay)  continue;
+        if (e.hour != m_state.gameHours) continue;
+
+        triggerStudyEvent(e);
+    }
+}
+
+void GameController::handleExam(const StudyEvent &e)
+{
+    double skillAvg = 0;
+    for (auto v : m_state.skills) skillAvg += v;
+    skillAvg /= qMax(1, m_state.skills.size());
+
+    int passChance = m_state.studyScore
+                     + int(skillAvg * 5)
+                     - m_state.sleepDebt * 3
+                     - int(m_state.burnout * 0.3);
+
+    passChance = qBound(5, passChance, 95);
+
+    int roll = QRandomGenerator::global()->bounded(100);
+
+    if (roll < passChance)
+    {
+        m_state.failedExams = 0;
+        m_state.xp += 50;
+        emit_msg(
+            QString("Сдал экзамен по \"%1\"! +50 XP").arg(e.subject),
+            "success"
+            );
+    }
+    else
+    {
+        m_state.failedExams++;
+        m_state.studyScore = qMax(0, m_state.studyScore - 20);
+        emit_msg(
+            QString("Завалил экзамен по \"%1\". "
+                    "Успеваемость -20. Провалов подряд: %2")
+                .arg(e.subject)
+                .arg(m_state.failedExams),
+            "error"
+            );
+        checkExpulsion();
+    }
+}
+
+void GameController::checkExpulsion()
+{
+    if (m_state.failedExams >= 3 || m_state.studyScore <= 20)
+    {
+        m_state.expelled = true;
+        emit_msg(
+            "Тебя отчислили за неуспеваемость. GAME OVER.",
+            "error"
+            );
+        checkGameOver();
+    }
+}
+
+void GameController::triggerStudyEvent(StudyEvent &e)
+{
+    QString typeName;
+    switch (e.type) {
+    case StudyEventType::Lecture:  typeName = "Лекция";   break;
+    case StudyEventType::Practice: typeName = "Практика"; break;
+    case StudyEventType::Lab:      typeName = "Лаба";     break;
+    case StudyEventType::Exam:     typeName = "Экзамен";  break;
+    }
+
+    emit_msg("── Учёба ────────────────────", "dim");
+    emit_msg(
+        QString("%1: %2").arg(typeName).arg(e.subject),
+        "highlight"
+        );
+
+    bool isWorking = !m_state.currentProjects.isEmpty()
+                     && m_state.gameHours >= 9
+                     && m_state.gameHours <= 16;
+
+    if (isWorking)
+    {
+        int penalty = 0;
+        switch (e.type) {
+        case StudyEventType::Lecture:  penalty = 5;  break;
+        case StudyEventType::Practice: penalty = 8;  break;
+        case StudyEventType::Lab:      penalty = 12; break;
+        case StudyEventType::Exam:     penalty = 25; break;
+        }
+        m_state.studyScore = qMax(0, m_state.studyScore - penalty);
+        emit_msg(
+            QString("Пропустил %1. Успеваемость -%2 (%3/100)")
+                .arg(typeName).arg(penalty).arg(m_state.studyScore),
+            "error"
+            );
+    }
+    else
+    {
+        int duration = (e.type == StudyEventType::Lab) ? 180 : 120;
+        int energyCost = (e.type == StudyEventType::Exam) ? 30 : 15;
+
+        advanceTime(duration);
+        m_state.energy = qMax(0, m_state.energy - energyCost);
+
+        if (e.type == StudyEventType::Lab)
+        {
+            m_state.pendingLab = true;
+            m_state.pendingLabSubject = e.subject;
+            emit_msg(
+                QString("Лаба по \"%1\" начата. "
+                        "Введи submit чтобы сдать (-20 энергии).")
+                    .arg(e.subject),
+                "warning"
+                );
+        }
+        else if (e.type == StudyEventType::Exam)
+        {
+            handleExam(e);
+        }
+        else
+        {
+            m_state.studyScore = qMin(100, m_state.studyScore + 2);
+            emit_msg(
+                QString("Посетил %1 по \"%2\". "
+                        "-%3 энергии, успеваемость: %4/100")
+                    .arg(typeName).arg(e.subject)
+                    .arg(energyCost).arg(m_state.studyScore),
+                "success"
+                );
+        }
+    }
+
+    e.attended = true;
     emit stateChanged();
 }

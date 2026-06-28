@@ -16,9 +16,22 @@ enum class EventType {
     InternetBill,
     LaundryReminder,
 
+    GroceryShopping,
+    PhoneBill,
+    RoomMess,
+    HealthCheck,
+
+    RentReminder,
+    LowMoneyAlert,
+
+    DormNoise,
+    RoommateIssue,
+
     LectureStart,
     LabDeadline,
     ExamWarning
+
+
 };
 
 struct GameEvent {

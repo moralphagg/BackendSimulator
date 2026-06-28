@@ -41,6 +41,22 @@ enum class EquipmentTier {
     WorkStation
 };
 
+enum class StudyEventType {
+    Lecture,
+    Practice,
+    Lab,
+    Exam
+};
+
+struct StudyEvent {
+    StudyEventType type;
+    int     day;
+    int     hour;
+    QString subject;
+    bool    attended = false;
+    bool    completed = false;
+};
+
 struct JobInfo {
     JobTitle title          = JobTitle::Unemployed;
     int      salaryBonus    = 0;

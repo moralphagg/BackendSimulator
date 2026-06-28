@@ -54,14 +54,40 @@ struct GameState {
 
     bool guiUnlocked = false;
 
+    bool pendingIncident = false;
+
     int burnout    = 0;
     int maxBurnout = 100;
+
+    int daysWithoutRest = 0;
+    int lastRestDay     = 0;
+    int highBurnoutDays = 0;
+
+    int sleepDebt     = 0;
+    int lastSleepDay  = 0;
+    bool sleptTonight = false;
 
     JobInfo     currentJob;
     CompanyInfo currentCompany;
 
     int deadlinesMissed  = 0;
     int deadlinesMet     = 0;
+
+    LifeStage     lifeStage     = LifeStage::Student;
+    HousingType   housingType   = HousingType::Dorm;
+    Equipment     equipment;
+
+    int   rentCost        = 0;
+    int   foodCost        = 50;
+    int   debt            = 0;
+    float ndflRate        = 0.13f;
+    float ndsRate         = 0.20f;
+
+    int   semesterDay     = 1;
+    int   studyScore      = 100;
+    bool  expelled        = false;
+
+    int   missedRentCount = 0;
 
     void initSkills() {
         const QStringList names = {

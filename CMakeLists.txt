@@ -25,6 +25,8 @@ qt_add_executable(BackendSimulator
     core/CareerData.cpp
     core/CareerTypes.h
     core/CareerTypes.cpp
+    core/EventSystem.h
+    core/EventSystem.cpp
     controller/GameController.h
     controller/GameController.cpp
     ui/MainWindow.h

@@ -104,6 +104,10 @@ Project ProjectQueue::generateProject(int level)
             p.difficulty * 3 + 1
             );
 
+    int baseDays = 10 + p.difficulty * 3;
+    int variance = QRandomGenerator::global()->bounded(-2, 4);
+    p.deadlineDay = qMax(7, baseDays + variance);
+
     return p;
 }
 void ProjectQueue::refill(GameState &state) {

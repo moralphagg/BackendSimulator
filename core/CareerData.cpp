@@ -52,19 +52,20 @@ CompanyInfo CareerData::companyInfo(CompanyType type)
 
 JobTitle CareerData::nextTitle(const GameState &s)
 {
-    // Перебираем все должности от высшей к низшей
-    // и возвращаем первую, для которой выполнены требования
+    if (s.lifeStage == LifeStage::Student)
+        return s.currentJob.title;
+
     struct Req { JobTitle t; int rep; int lvl; };
     static const QList<Req> reqs = {
-        {JobTitle::CTO,       200, 27},
-        {JobTitle::Architect, 150, 22},
-        {JobTitle::Lead,      100, 17},
-        {JobTitle::Senior,    60,  12},
-        {JobTitle::Middle,    30,  7 },
-        {JobTitle::Junior,    10,  3 },
-        {JobTitle::Intern,    0,   1 },
-        {JobTitle::Freelancer,0,   0 },
-    };
+                                    {JobTitle::CTO,       200, 27},
+                                    {JobTitle::Architect, 150, 22},
+                                    {JobTitle::Lead,      100, 17},
+                                    {JobTitle::Senior,    60,  12},
+                                    {JobTitle::Middle,    30,  7 },
+                                    {JobTitle::Junior,    10,  3 },
+                                    {JobTitle::Intern,    0,   1 },
+                                    {JobTitle::Freelancer,0,   0 },
+                                    };
 
     for (const auto &r : reqs) {
         if (s.reputation >= r.rep && s.level >= r.lvl)
@@ -88,5 +89,22 @@ bool CareerData::canJoin(const GameState &s, CompanyType type)
         return s.level >= 20 && s.reputation >= 150;
     default:
         return false;
+    }
+}
+
+
+Equipment CareerData::equipmentInfo(EquipmentTier tier)
+{
+    switch (tier) {
+    case EquipmentTier::OldLaptop:
+        return {tier, "Старый ноутбук",   0,      1.0,  200, 0.00};
+    case EquipmentTier::NormalLaptop:
+        return {tier, "Ноутбук",          15000,  1.2,  220, 0.05};
+    case EquipmentTier::GamingPC:
+        return {tier, "Игровой ПК",       45000,  1.45, 240, 0.10};
+    case EquipmentTier::WorkStation:
+        return {tier, "Рабочая станция",  120000, 1.8,  260, 0.20};
+    default:
+        return {tier, "???", 0, 1.0, 200, 0.0};
     }
 }

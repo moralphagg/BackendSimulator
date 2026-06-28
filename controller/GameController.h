@@ -2,6 +2,7 @@
 #include <QObject>
 #include <QTimer>
 #include "../core/GameState.h"
+#include "../core/EventSystem.h"
 
 class GameController : public QObject {
     Q_OBJECT
@@ -10,6 +11,8 @@ public:
 
     void executeCommand(const QString &cmd);
 
+    void sendWelcome();
+
     const GameState &state() const { return m_state; }
 
 signals:
@@ -17,12 +20,15 @@ signals:
     void stateChanged();
     void levelUp(int newLevel);
     void guiUnlocked();
+    void gameOver(const QString &reason);
 
 private slots:
     void onGameTick();
 
 private:
     GameState m_state;
+
+    void checkGameOver();
 
     QTimer* m_gameTimer;
 
@@ -32,11 +38,22 @@ private:
 
     void checkPromotion();
 
+    void onNewDay();
+
+    bool m_isNewGame = false;
+
+    QList<GameEvent> m_eventQueue;
+
+    void generateDayEvents();
+    void checkTimeEvents();
+    void triggerEvent(const GameEvent &e);
+
     QPair<QString,QString> cmdStart();
     QPair<QString,QString> cmdWork();
     QPair<QString,QString> cmdBugs();
     QPair<QString,QString> cmdLearn();
     QPair<QString,QString> cmdRest();
+    QPair<QString,QString> cmdSleep();
     QPair<QString,QString> cmdDeploy();
     QPair<QString,QString> cmdOptimize();
     QPair<QString,QString> cmdMeeting();
@@ -51,6 +68,7 @@ private:
     QPair<QString,QString> cmdSave();
     QPair<QString,QString> cmdLoad();
     QPair<QString,QString> cmdFreelance();
+    QPair<QString,QString> cmdBuy(const QString &item);
 
     void checkLevelUp();
     void updateProjectQueue();

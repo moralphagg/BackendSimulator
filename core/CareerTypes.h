@@ -22,6 +22,25 @@ enum class JobTitle {
     CTO
 };
 
+enum class LifeStage {
+    Student,
+    Freelancer,
+    Employed
+};
+
+enum class HousingType {
+    Dorm,
+    Rent,
+    Own
+};
+
+enum class EquipmentTier {
+    OldLaptop,
+    NormalLaptop,
+    GamingPC,
+    WorkStation
+};
+
 struct JobInfo {
     JobTitle title          = JobTitle::Unemployed;
     int      salaryBonus    = 0;
@@ -38,4 +57,13 @@ struct CompanyInfo {
     double      deadlineMultiplier   = 1.0;
     double      reputationMultiplier = 1.0;
     QString     description;
+};
+
+struct Equipment {
+    EquipmentTier tier        = EquipmentTier::OldLaptop;
+    QString       name        = "Старый ноутбук";
+    int           price       = 0;
+    double        speedBonus  = 1.0;
+    int           maxEnergy   = 200;
+    double        bugReduction = 0.0;
 };

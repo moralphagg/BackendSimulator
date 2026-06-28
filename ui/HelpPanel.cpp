@@ -1,5 +1,4 @@
 #include "HelpPanel.h"
-
 #include <QVBoxLayout>
 #include <QLabel>
 #include <QTextEdit>

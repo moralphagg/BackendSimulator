@@ -103,6 +103,8 @@ void MainWindow::connectSignals()
         this,
         &MainWindow::onCommandEntered
         );
+
+    m_controller->sendWelcome();
 }
 
 void MainWindow::onCommandEntered(const QString& cmd)

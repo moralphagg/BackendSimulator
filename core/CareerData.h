@@ -9,4 +9,5 @@ public:
     static CompanyInfo companyInfo(CompanyType type);
     static JobTitle    nextTitle(const GameState &s);
     static bool        canJoin(const GameState &s, CompanyType type);
+    static Equipment equipmentInfo(EquipmentTier tier);
 };

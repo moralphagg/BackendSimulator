@@ -68,6 +68,22 @@ bool SaveManager::save(const GameState& state)
     root["companySalaryPerDay"]     = state.currentCompany.salaryPerDay;
     root["companyDeadlineMult"]     = state.currentCompany.deadlineMultiplier;
     root["companyRepMult"]          = state.currentCompany.reputationMultiplier;
+    root["daysWithoutRest"]         = state.daysWithoutRest;
+    root["lastRestDay"]             = state.lastRestDay;
+    root["lifeStage"]               = static_cast<int>(state.lifeStage);
+    root["housingType"]             = static_cast<int>(state.housingType);
+    root["equipmentTier"]           = static_cast<int>(state.equipment.tier);
+    root["rentCost"]                = state.rentCost;
+    root["foodCost"]                = state.foodCost;
+    root["debt"]                    = state.debt;
+    root["semesterDay"]             = state.semesterDay;
+    root["studyScore"]              = state.studyScore;
+    root["expelled"]                = state.expelled;
+    root["missedRentCount"]         = state.missedRentCount;
+    root["highBurnoutDays"]         = state.highBurnoutDays;
+    root["sleepDebt"]               = state.sleepDebt;
+    root["lastSleepDay"]            = state.lastSleepDay;
+    root["sleptTonight"]            = state.sleptTonight;
 
     root["maxConcurrentProjects"] =
         state.maxConcurrentProjects;
@@ -136,11 +152,20 @@ bool SaveManager::load(GameState& state)
 
     auto root = json.object();
 
-    state.level = root["level"].toInt();
-    state.xp = root["xp"].toInt();
-    state.money = root["money"].toInt();
-    state.energy = root["energy"].toInt();
-    state.reputation = root["reputation"].toInt();
+    state.level =
+        root["level"].toInt();
+
+    state.xp =
+        root["xp"].toInt();
+
+    state.money =
+        root["money"].toInt();
+
+    state.energy =
+        root["energy"].toInt();
+
+    state.reputation =
+        root["reputation"].toInt();
 
     state.maxEnergy =
         root["maxEnergy"].toInt(200);
@@ -180,6 +205,36 @@ bool SaveManager::load(GameState& state)
 
     state.maxQueueSize =
         root["maxQueueSize"].toInt(5);
+
+    state.daysWithoutRest =
+        root["daysWithoutRest"].toInt(0);
+
+    state.lastRestDay     =
+        root["lastRestDay"].toInt(0);
+
+    state.highBurnoutDays =
+        root["highBurnoutDays"].toInt(0);
+
+    state.sleepDebt    =
+        root["sleepDebt"].toInt(0);
+
+    state.lastSleepDay =
+        root["lastSleepDay"].toInt(0);
+
+    state.sleptTonight =
+        root["sleptTonight"].toBool(false);
+
+    state.lifeStage     = static_cast<LifeStage>(root["lifeStage"].toInt(0));
+    state.housingType   = static_cast<HousingType>(root["housingType"].toInt(0));
+    state.equipment     = CareerData::equipmentInfo(
+        static_cast<EquipmentTier>(root["equipmentTier"].toInt(0)));
+    state.rentCost      = root["rentCost"].toInt(3000);
+    state.foodCost      = root["foodCost"].toInt(50);
+    state.debt          = root["debt"].toInt(0);
+    state.semesterDay   = root["semesterDay"].toInt(1);
+    state.studyScore    = root["studyScore"].toInt(100);
+    state.expelled      = root["expelled"].toBool(false);
+    state.missedRentCount = root["missedRentCount"].toInt(0);
 
     {
         auto title = static_cast<JobTitle>(root["jobTitle"].toInt(1));

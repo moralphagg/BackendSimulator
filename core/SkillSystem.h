@@ -15,6 +15,5 @@ public:
     static int migrateCost(const GameState &s);
     static int auditCost(const GameState &s);
 
-    // Прокачка конкретного или случайного навыка
     static QString improveRandom(GameState &s, const QStringList &candidates, double min, double max);
 };

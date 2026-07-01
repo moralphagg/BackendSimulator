@@ -12,6 +12,7 @@ enum class CompanyType {
 
 enum class JobTitle {
     Unemployed,
+    Vibecoder,
     Freelancer,
     Intern,
     Junior,
@@ -19,9 +20,9 @@ enum class JobTitle {
     Senior,
     Lead,
     Architect,
-    CTO
+    CTO,
+    Founder
 };
-
 enum class LifeStage {
     Student,
     Freelancer,
@@ -82,4 +83,15 @@ struct Equipment {
     double        speedBonus  = 1.0;
     int           maxEnergy   = 200;
     double        bugReduction = 0.0;
+};
+
+struct JobOffer {
+    CompanyType companyType;
+    JobTitle    title;
+    int         salaryPerDay;
+    int         repRequired;
+    int         levelRequired;
+    double      skillRequired;
+    QString     description;
+    int         expiresDay;
 };

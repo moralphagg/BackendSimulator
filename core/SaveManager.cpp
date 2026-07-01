@@ -57,6 +57,11 @@ bool SaveManager::save(const GameState& state)
     root["gameHours"]               = state.gameHours;
     root["gameMinutes"]             = state.gameMinutes;
     root["burnout"]                 = state.burnout;
+
+    root["mood"]     = state.mood;
+    root["stress"]   = state.stress;
+    root["techDebt"] = state.techDebt;
+
     root["maxBurnout"]              = state.maxBurnout;
     root["deadlinesMissed"]         = state.deadlinesMissed;
     root["deadlinesMet"]            = state.deadlinesMet;
@@ -113,6 +118,30 @@ bool SaveManager::save(const GameState& state)
     root["laundryDays"]     = state.laundryDays;
     root["roomMessLevel"]   = state.roomMessLevel;
     root["daysIndoor"]      = state.daysIndoor;
+    root["pendingReview"]     = state.pendingReview;
+    root["reviewProjectName"] = state.reviewProjectName;
+    root["reviewBugsFound"]   = state.reviewBugsFound;
+    root["reviewQuality"]     = state.reviewQuality;
+    root["prodIncidents"]     = state.prodIncidents;
+    root["prodIgnored"]       = state.prodIgnored;
+    root["jobMarketRefreshDay"]  = state.jobMarketRefreshDay;
+    root["interviewsCooldown"]   = state.interviewsCooldown;
+    root["consecutiveRefusals"]  = state.consecutiveRefusals;
+
+    root["pendingHomework"]     = state.pendingHomework;
+    root["homeworkSubject"]     = state.homeworkSubject;
+    root["homeworkDeadline"]    = state.homeworkDeadline;
+    root["homeworksMissed"]     = state.homeworksMissed;
+    root["courseWorkActive"]    = state.courseWorkActive;
+    root["courseWorkName"]      = state.courseWorkName;
+    root["courseWorkProgress"]  = state.courseWorkProgress;
+    root["courseWorkDeadline"]  = state.courseWorkDeadline;
+    root["courseWorkSubmitted"] = state.courseWorkSubmitted;
+    root["transportCost"]       = state.transportCost;
+    root["hostingCost"]         = state.hostingCost;
+    root["parentAllowance"]     = state.parentAllowance;
+    root["grantAmount"]         = state.grantAmount;
+    root["tutoringSessions"]    = state.tutoringSessions;
 
     root["maxConcurrentProjects"] =
         state.maxConcurrentProjects;
@@ -220,6 +249,10 @@ bool SaveManager::load(GameState& state)
     state.burnout    =
         root["burnout"].toInt(0);
 
+    state.mood     = root["mood"].toInt(80);
+    state.stress   = root["stress"].toInt(0);
+    state.techDebt = root["techDebt"].toInt(0);
+
     state.maxBurnout =
         root["maxBurnout"].toInt(100);
 
@@ -316,13 +349,36 @@ bool SaveManager::load(GameState& state)
         e.completed = obj["completed"].toBool(false);
         state.schedule.append(e);
     }
-    state.foodStock       = root["foodStock"].toInt(3);
-    state.daysWithoutFood = root["daysWithoutFood"].toInt(0);
-    state.laundryPending  = root["laundryPending"].toBool(false);
-    state.laundryDays     = root["laundryDays"].toInt(0);
-    state.roomMessLevel   = root["roomMessLevel"].toInt(0);
-    state.daysIndoor      = root["daysIndoor"].toInt(0);
+    state.foodStock         = root["foodStock"].toInt(3);
+    state.daysWithoutFood   = root["daysWithoutFood"].toInt(0);
+    state.laundryPending    = root["laundryPending"].toBool(false);
+    state.laundryDays       = root["laundryDays"].toInt(0);
+    state.roomMessLevel     = root["roomMessLevel"].toInt(0);
+    state.daysIndoor        = root["daysIndoor"].toInt(0);
+    state.pendingReview     = root["pendingReview"].toBool(false);
+    state.reviewProjectName = root["reviewProjectName"].toString();
+    state.reviewBugsFound   = root["reviewBugsFound"].toInt(0);
+    state.reviewQuality     = root["reviewQuality"].toInt(0);
+    state.prodIncidents     = root["prodIncidents"].toInt(0);
+    state.prodIgnored       = root["prodIgnored"].toInt(0);
+    state.jobMarketRefreshDay = root["jobMarketRefreshDay"].toInt(0);
+    state.interviewsCooldown  = root["interviewsCooldown"].toInt(0);
+    state.consecutiveRefusals = root["consecutiveRefusals"].toInt(0);
 
+    state.pendingHomework    = root["pendingHomework"].toBool(false);
+    state.homeworkSubject    = root["homeworkSubject"].toString();
+    state.homeworkDeadline   = root["homeworkDeadline"].toInt(0);
+    state.homeworksMissed    = root["homeworksMissed"].toInt(0);
+    state.courseWorkActive   = root["courseWorkActive"].toBool(false);
+    state.courseWorkName     = root["courseWorkName"].toString();
+    state.courseWorkProgress = root["courseWorkProgress"].toInt(0);
+    state.courseWorkDeadline = root["courseWorkDeadline"].toInt(0);
+    state.courseWorkSubmitted= root["courseWorkSubmitted"].toBool(false);
+    state.transportCost      = root["transportCost"].toInt(40);
+    state.hostingCost        = root["hostingCost"].toInt(0);
+    state.parentAllowance    = root["parentAllowance"].toInt(0);
+    state.grantAmount        = root["grantAmount"].toInt(0);
+    state.tutoringSessions   = root["tutoringSessions"].toInt(0);
 
     state.skills.clear();
 

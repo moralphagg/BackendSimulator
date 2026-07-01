@@ -55,12 +55,31 @@ struct GameState {
     bool guiUnlocked = false;
 
     bool pendingIncident = false;
+    bool    pendingReview     = false;
+    QString reviewProjectName;
+    int     reviewBugsFound   = 0;
+    int     reviewQuality     = 0;
+
+    int     prodIncidents     = 0;
+    int     prodIgnored       = 0;
+
+    QList<JobOffer> jobMarket;
+    int  jobMarketRefreshDay = 0;
+    int  interviewsCooldown  = 0;
+    int  consecutiveRefusals = 0;
 
     bool    pendingLab        = false;
     QString pendingLabSubject;
 
     int burnout    = 0;
     int maxBurnout = 100;
+
+    int mood      = 80;
+    int maxMood   = 100;
+    int stress    = 0;
+    int maxStress = 100;
+
+    int techDebt  = 0;
 
     int daysWithoutRest = 0;
     int lastRestDay     = 0;
@@ -107,6 +126,26 @@ struct GameState {
     int  laundryDays      = 0;
     int  roomMessLevel    = 0;
     int  daysIndoor       = 0;
+
+
+    bool pendingHomework    = false;
+    QString homeworkSubject;
+    int  homeworkDeadline   = 0;
+    int  homeworksMissed    = 0;
+
+    bool courseWorkActive   = false;
+    QString courseWorkName;
+    int  courseWorkProgress = 0;
+    int  courseWorkDeadline = 0;
+    bool courseWorkSubmitted= false;
+
+    int  transportCost      = 40;
+    int  hostingCost        = 0;
+    int  booksCost          = 0;
+
+    int  parentAllowance    = 0;
+    int  grantAmount        = 0;
+    int  tutoringSessions   = 0;
 
     void initSkills() {
         const QStringList names = {

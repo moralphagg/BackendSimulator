@@ -29,6 +29,10 @@ public:
     void setJob(const QString &title, const QString &company);
     void setBurnout(int value, int max);
 
+    void setMood(int value, int max);
+    void setStress(int value, int max);
+    void setTechDebt(int value);
+
 private:
     QLabel *levelLabel;
     QLabel *xpLabel;
@@ -43,4 +47,7 @@ private:
     QLabel *jobLabel;
     QLabel *companyLabel;
     QProgressBar *burnoutBar;
+    QProgressBar *moodBar;
+    QProgressBar *stressBar;
+    QLabel       *techDebtLabel;
 };

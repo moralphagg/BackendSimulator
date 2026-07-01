@@ -11,4 +11,5 @@ public:
     static bool        canJoin(const GameState &s, CompanyType type);
     static Equipment equipmentInfo(EquipmentTier tier);
     static QStringList csSubjects();
+    static QList<JobOffer> generateJobMarket(const GameState &s);
 };

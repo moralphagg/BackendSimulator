@@ -35,6 +35,9 @@ GameController::GameController(QObject *parent)
     m_state.currentJob     = CareerData::jobInfo(JobTitle::Unemployed);
     m_state.currentCompany = CareerData::companyInfo(CompanyType::None);
 
+    m_state.parentAllowance = 2000;
+    m_state.transportCost   = 40;
+
     m_gameTimer = new QTimer(this);
 
     connect(
@@ -136,6 +139,13 @@ void GameController::postCommand(const QString &cmd) {
     else if (cmd == "meeting")        result = cmdMeeting();
     else if (cmd == "research")       result = cmdResearch();
     else if (cmd == "mentor")         result = cmdMentor();
+    else if (cmd == "homework")       result = cmdHomework("");
+    else if (cmd == "homework skip")  result = cmdHomework("skip");
+    else if (cmd == "homework order") result = cmdHomework("order");
+    else if (cmd == "coursework")     result = cmdCoursework();
+    else if (cmd == "tutor")          result = cmdTutor();
+    else if (cmd == "parents")        result = cmdParents();
+    else if (cmd == "grant")          result = cmdGrant();
     else if (cmd == "freelance")      result = cmdFreelance();
     else if (cmd == "refactor")       result = cmdRefactor();
     else if (cmd == "document")       result = cmdDocument();
@@ -144,6 +154,7 @@ void GameController::postCommand(const QString &cmd) {
     else if (cmd == "migrate")        result = cmdMigrate();
     else if (cmd == "audit")          result = cmdAudit();
     else if (cmd == "schedule")       result = cmdSchedule();
+    else if (cmd == "status")         result = cmdStatus();
     else if (cmd == "submit")
     {
         if (!m_state.pendingLab)
@@ -169,6 +180,17 @@ void GameController::postCommand(const QString &cmd) {
             "success"
             );
     }
+    else if (cmd == "review fix")     result = cmdReview("fix");
+    else if (cmd == "review skip")    result = cmdReview("skip");
+    else if (cmd == "jobs")              result = cmdJobs();
+    else if (cmd == "quit")              result = cmdQuit();
+    else if (cmd.startsWith("apply "))
+    {
+        bool ok;
+        int idx = cmd.mid(6).trimmed().toInt(&ok);
+        result  = ok ? cmdApply(idx)
+                    : qMakePair(QString("Укажи номер: apply 1"), QString("warning"));
+    }
     else if (cmd == "clear")          { emit_msg("__clear__"); return; }
     else if (cmd == "save")           result = cmdSave();
     else if (cmd == "load")           result = cmdLoad();
@@ -188,22 +210,56 @@ void GameController::postCommand(const QString &cmd) {
         if (cmd == "fix")
         {
             m_state.pendingIncident = false;
-            m_state.energy = qMax(0, m_state.energy - 40);
+
+            int energyCost = 40;
+            int timeSpent  = QRandomGenerator::global()->bounded(30, 91);
+
+            m_state.energy    = qMax(0, m_state.energy - energyCost);
             m_state.reputation = qMin(200, m_state.reputation + 5);
             updateBurnout(+8);
-            emit_msg("Починил прод. +5 репутации, -40 энергии.", "success");
+            advanceTime(timeSpent);
+
+            m_state.skills["debugging"] =
+                qMin(10.0, m_state.skills["debugging"] + 0.1);
+
+            emit_msg(
+                QString("Починил прод за %1 мин. "
+                        "+5 репутации, -40 энергии, debugging +0.1")
+                    .arg(timeSpent),
+                "success"
+                );
         }
         else if (cmd == "ignore")
         {
             m_state.pendingIncident = false;
-            m_state.reputation = qMax(0, m_state.reputation - 10);
-            emit_msg("Проигнорировал. -10 репутации.", "error");
+            m_state.prodIgnored++;
+
+            int repLoss = 10 + m_state.prodIgnored * 5;
+            m_state.reputation = qMax(0, m_state.reputation - repLoss);
+
+            emit_msg(
+                QString("Проигнорировал инцидент. "
+                        "-%1 репутации. Игнорировано всего: %2")
+                    .arg(repLoss)
+                    .arg(m_state.prodIgnored),
+                "error"
+                );
+
+            if (m_state.prodIgnored >= 3)
+                emit_msg(
+                    "Ты часто игноришь инциденты. "
+                    "Это скажется на карьере.",
+                    "error"
+                    );
         }
         else
         {
-            emit_msg("Прод горит! Сначала введи fix или ignore.", "error");
-            return;
+            emit_msg(
+                "Прод горит! Сначала введи fix или ignore.",
+                "error"
+                );
         }
+
         SaveManager::save(m_state);
         emit stateChanged();
         return;
@@ -259,6 +315,12 @@ QPair<QString,QString> GameController::cmdWork()
 
     double burnoutPenalty = 1.0 - (m_state.burnout / 150.0);
 
+    double moodBonus = 0.6 + (m_state.mood / 250.0);
+
+    int stressExtraBugs = 0;
+    if (m_state.stress >= 80)      stressExtraBugs = 3;
+    else if (m_state.stress >= 50) stressExtraBugs = 1;
+
     double sleepPenalty = 1.0 - (m_state.sleepDebt * 0.05);
     sleepPenalty = qMax(0.5, sleepPenalty);
 
@@ -281,7 +343,8 @@ QPair<QString,QString> GameController::cmdWork()
                                * burnoutPenalty
                                * equipBonus
                                * skillBonus
-                               * sleepPenalty) - p.difficulty);
+                               * sleepPenalty
+                               * moodBonus) - p.difficulty);
     p.progress = qMin(100, p.progress + progressGain);
     m_state.energy -= energyCost;
     advanceTime(120);
@@ -294,6 +357,30 @@ QPair<QString,QString> GameController::cmdWork()
 
     if (QRandomGenerator::global()->bounded(100) < bugChance)
         p.bugs += QRandomGenerator::global()->bounded(1, 4);
+
+    if (stressExtraBugs > 0 &&
+        QRandomGenerator::global()->bounded(100) < 40)
+    {
+        p.bugs += stressExtraBugs;
+        emit_msg(
+            QString("Из-за стресса допустил дополнительных багов: +%1")
+                .arg(stressExtraBugs),
+            "warning"
+            );
+    }
+    if (p.bugs > 5)
+        updateTechDebt(+2);
+
+    if (m_state.techDebt >= 50)
+    {
+        emit_msg(
+            QString("Задеплоил с высоким техдолгом (%1/100). "
+                    ).arg(m_state.techDebt),
+            "warning"
+            );
+        updateStress(+10);
+        updateTechDebt(+5);
+    }
 
     return {
         QString("%1\nПрогресс: %2% (+%3) | Багов: %4%5%6")
@@ -387,6 +474,8 @@ QPair<QString,QString> GameController::cmdRest()
     m_state.energy = qMin(m_state.maxEnergy, m_state.energy + gain);
     advanceTime(30);
     updateBurnout(-2);
+    updateMood(+5);
+    updateStress(-3);
 
     return {
         QString("Сделал перерыв: +%1 энергии. "
@@ -457,6 +546,11 @@ QPair<QString,QString> GameController::cmdSleep()
     m_state.daysWithoutRest = 0;
 
     advanceTime(sleepHours * 60);
+
+    int moodGain   = sleepHours >= 7 ? 15 : 5;
+    int stressLoss = sleepHours >= 7 ? 10 : 3;
+    updateMood(+moodGain);
+    updateStress(-stressLoss);
 
     return {
         QString("Поспал %1 ч. +%2 энергии, выгорание %3.")
@@ -578,6 +672,10 @@ QPair<QString,QString> GameController::cmdDeploy() {
         p.difficulty * 30
         );
     updateBurnout(-1);
+    updateMood(+15);
+    updateStress(-10);
+
+    triggerCodeReview(projectName, p.difficulty, p.bugs);
 
     m_state.currentProjects.dequeue();
 
@@ -611,6 +709,8 @@ QPair<QString,QString> GameController::cmdMeeting() {
     m_state.energy -= eLoss;
     advanceTime(90);
     updateBurnout(+3);
+    updateStress(+8);
+    updateMood(-5);
     m_state.xp     += xp;
     m_state.skills["api_design"] += 0.1 * SkillSystem::skillBonusMultiplier(m_state);
     return {QString("Митинг проведён. -%1 энергии, +%2 опыта").arg(eLoss).arg(xp), "text"};
@@ -646,6 +746,243 @@ QPair<QString,QString> GameController::cmdMentor() {
     return {QString("Менторинг завершён! +%1 опыта, +%2 репутации (-%3 денег)").arg(xp).arg(rep).arg(cost), "success"};
 }
 
+QPair<QString,QString> GameController::cmdHomework(const QString &action)
+{
+    if (m_state.lifeStage != LifeStage::Student)
+        return {"Ты уже не студент.", "warning"};
+
+    if (!m_state.pendingHomework)
+        return {"Нет активного домашнего задания.", "text"};
+
+    if (action == "skip")
+    {
+        int caught = QRandomGenerator::global()->bounded(100);
+        m_state.pendingHomework = false;
+
+        if (caught < 30)
+        {
+            m_state.studyScore = qMax(0, m_state.studyScore - 15);
+            updateStress(+10);
+            return {
+                "Поймали на списывании! Успеваемость -15.",
+                "error"
+            };
+        }
+        return {"Списал. Пронесло.", "text"};
+    }
+
+    if (action == "order")
+    {
+        int cost = QRandomGenerator::global()->bounded(500, 1501);
+        if (m_state.money < cost)
+            return {
+                QString("Нет денег на заказ. Нужно %1.").arg(cost),
+                "error"
+            };
+
+        m_state.money -= cost;
+        m_state.pendingHomework = false;
+        m_state.studyScore = qMin(100, m_state.studyScore + 3);
+        return {
+            QString("Заказал выполнение. -%1. Успеваемость +3.")
+                .arg(cost),
+            "success"
+        };
+    }
+
+    if (m_state.energy < 15)
+        return {"Слишком устал. Отдохни перед заданием.", "warning"};
+
+    int energyCost = QRandomGenerator::global()->bounded(15, 31);
+    m_state.energy = qMax(0, m_state.energy - energyCost);
+    advanceTime(90);
+
+    m_state.pendingHomework = false;
+    m_state.studyScore = qMin(100, m_state.studyScore + 5);
+
+    auto subjects = CareerData::csSubjects();
+    if (subjects.contains(m_state.homeworkSubject))
+    {
+        QMap<QString,QString> subjectToSkill = {
+                                                 {"Алгоритмы и структуры данных", "debugging"},
+                                                 {"Базы данных",                  "sql"},
+                                                 {"Операционные системы",         "deployment"},
+                                                 {"Сети и протоколы",             "api_design"},
+                                                 {"Веб-разработка",               "python"},
+                                                 {"Docker",                       "docker"},
+                                                 {"Архитектура ПО",               "microservices"},
+                                                 };
+
+        QString skill = subjectToSkill.value(
+            m_state.homeworkSubject, "");
+        if (!skill.isEmpty() && m_state.skills.contains(skill))
+        {
+            m_state.skills[skill] =
+                qMin(10.0, m_state.skills[skill] + 0.1);
+        }
+    }
+
+    updateMood(+5);
+
+    return {
+        QString("Сделал домашнее по \"%1\". "
+                "-%2 энергии, успеваемость +5.")
+            .arg(m_state.homeworkSubject)
+            .arg(energyCost),
+        "success"
+    };
+}
+
+QPair<QString,QString> GameController::cmdCoursework()
+{
+    if (m_state.lifeStage != LifeStage::Student)
+        return {"Ты уже не студент.", "warning"};
+
+    if (!m_state.courseWorkActive)
+        return {"Нет активной курсовой работы.", "text"};
+
+    if (m_state.courseWorkSubmitted)
+        return {"Курсовая уже сдана.", "text"};
+
+    if (m_state.energy < 20)
+        return {"Слишком устал. Нужно минимум 20 энергии.", "warning"};
+
+    int energyCost = QRandomGenerator::global()->bounded(20, 36);
+    m_state.energy = qMax(0, m_state.energy - energyCost);
+    advanceTime(120);
+    updateStress(+5);
+
+    double skillAvg = 0;
+    for (auto v : m_state.skills) skillAvg += v;
+    skillAvg /= qMax(1, m_state.skills.size());
+
+    int gain = int(5 + skillAvg * 2 + (m_state.mood / 20));
+    m_state.courseWorkProgress =
+        qMin(100, m_state.courseWorkProgress + gain);
+
+    if (m_state.courseWorkProgress >= 100)
+    {
+        m_state.courseWorkSubmitted = true;
+        m_state.courseWorkActive   = false;
+        m_state.studyScore = qMin(100, m_state.studyScore + 15);
+        m_state.xp += 100;
+        updateMood(+20);
+        updateStress(-15);
+
+        return {
+            QString("Курсовая \"%1\" сдана! "
+                    "+15 успеваемости, +100 XP.")
+                .arg(m_state.courseWorkName),
+            "success"
+        };
+    }
+
+    return {
+        QString("Курсовая \"%1\": %2% (+%3). "
+                "Дедлайн: день %4. -%5 энергии.")
+            .arg(m_state.courseWorkName)
+            .arg(m_state.courseWorkProgress)
+            .arg(gain)
+            .arg(m_state.courseWorkDeadline)
+            .arg(energyCost),
+        "success"
+    };
+}
+
+QPair<QString,QString> GameController::cmdTutor()
+{
+    if (m_state.lifeStage != LifeStage::Student)
+        return {"Репетиторство доступно только студентам.", "warning"};
+
+    if (m_state.energy < 20)
+        return {"Нет сил преподавать.", "warning"};
+
+    if (m_state.gameHours < 14 || m_state.gameHours > 20)
+        return {"Репетиторство — с 14:00 до 20:00.", "warning"};
+
+    int earnings = QRandomGenerator::global()->bounded(500, 1201);
+    m_state.money += earnings;
+    m_state.energy = qMax(0, m_state.energy - 20);
+    m_state.tutoringSessions++;
+    advanceTime(60);
+    updateStress(+3);
+
+    m_state.skills["api_design"] =
+        qMin(10.0, m_state.skills["api_design"] + 0.05);
+
+    return {
+        QString("Провёл урок репетиторства. +%1, -20 энергии. "
+                "Всего сессий: %2.")
+            .arg(earnings)
+            .arg(m_state.tutoringSessions),
+        "success"
+    };
+}
+
+QPair<QString,QString> GameController::cmdParents()
+{
+    if (m_state.lifeStage != LifeStage::Student)
+        return {"Это работает только для студентов.", "warning"};
+
+    static int lastParentsDay = 0;
+    if (m_state.gameDay - lastParentsDay < 30)
+        return {
+            QString("Родители уже помогали. "
+                    "Следующий раз через %1 дней.")
+                .arg(30 - (m_state.gameDay - lastParentsDay)),
+            "warning"
+        };
+
+    int amount = QRandomGenerator::global()->bounded(1000, 3001);
+    m_state.money  += amount;
+    lastParentsDay  = m_state.gameDay;
+    m_state.parentAllowance = amount;
+    updateMood(+5);
+
+    return {
+        QString("Родители помогли: +%1.").arg(amount),
+        "success"
+    };
+}
+
+QPair<QString,QString> GameController::cmdGrant()
+{
+    if (m_state.lifeStage != LifeStage::Student)
+        return {"Гранты доступны только студентам.", "warning"};
+
+    if (m_state.studyScore < 70)
+        return {
+            "Для получения гранта нужна успеваемость 70+. "
+            "Сейчас: " + QString::number(m_state.studyScore),
+            "warning"
+        };
+
+    if (m_state.grantAmount > 0)
+        return {
+            QString("Грант уже активен: %1/90 дней.")
+                .arg(m_state.gameDay % 90),
+            "text"
+        };
+
+    int chance = m_state.studyScore - 60;
+    if (QRandomGenerator::global()->bounded(100) < chance)
+    {
+        m_state.grantAmount = QRandomGenerator::global()
+        ->bounded(3000, 8001);
+        updateMood(+15);
+        return {
+            QString("Грант получен! +%1 каждые 90 дней.")
+                .arg(m_state.grantAmount),
+            "success"
+        };
+    }
+
+    return {
+        "Заявка на грант отклонена. Попробуй позже.",
+        "warning"
+    };
+}
+
 QPair<QString,QString> GameController::cmdFreelance()
 {
     if (m_state.energy < 15)
@@ -665,6 +1002,8 @@ QPair<QString,QString> GameController::cmdFreelance()
 
     advanceTime(180);
     updateBurnout(+3);
+    updateMood(+10);
+    updateStress(-5);
 
     return {
         QString(
@@ -676,6 +1015,54 @@ QPair<QString,QString> GameController::cmdFreelance()
     };
 }
 
+QPair<QString,QString> GameController::cmdReview(const QString &action)
+{
+    if (!m_state.pendingReview)
+        return {"Нет активного code review.", "warning"};
+
+    if (action == "fix")
+    {
+        int energyCost = m_state.reviewBugsFound * 8;
+        if (m_state.energy < energyCost)
+            return {
+                QString("Не хватает энергии. Нужно %1.").arg(energyCost),
+                "error"
+            };
+
+        m_state.energy -= energyCost;
+        m_state.pendingReview = false;
+
+        m_state.skills["debugging"] =
+            qMin(10.0, m_state.skills["debugging"] + 0.2);
+
+        int xpGain = m_state.reviewBugsFound * 15;
+        m_state.xp += xpGain;
+        m_state.reputation += 1;
+        advanceTime(m_state.reviewBugsFound * 20);
+
+        return {
+            QString("Исправил %1 багов из ревью. "
+                    "+%2 XP, +1 репутация, debugging +0.2")
+                .arg(m_state.reviewBugsFound)
+                .arg(xpGain),
+            "success"
+        };
+    }
+    else
+    {
+        m_state.pendingReview = false;
+        m_state.reputation    = qMax(0, m_state.reputation - 3);
+        updateBurnout(+3);
+        updateTechDebt(+8);
+
+        return {
+            QString("Проигнорировал замечания. "
+                    "-3 репутации. Технический долг растёт."),
+            "warning"
+        };
+    }
+}
+
 QPair<QString,QString> GameController::cmdRefactor() {
     if (m_state.energy < 20) return {"Слишком устал для рефакторинга!", "warning"};
     QString info = SkillSystem::improveRandom(m_state, {"python","debugging","api_design"}, 0.2, 0.4);
@@ -683,6 +1070,8 @@ QPair<QString,QString> GameController::cmdRefactor() {
     m_state.energy -= 20;
     advanceTime(150);
     updateBurnout(+3);
+    updateTechDebt(-15);
+    updateMood(+5);
     return {QString("Рефакторинг завершён! %1, +10 опыта").arg(info), "success"};
 }
 
@@ -695,6 +1084,7 @@ QPair<QString,QString> GameController::cmdDocument() {
     m_state.energy -= 12;
     advanceTime(90);
     updateBurnout(+2);
+    updateTechDebt(-5);
     return {QString("Документация написана! +%1 денег, +%2 опыта").arg(money).arg(xp), "success"};
 }
 
@@ -782,6 +1172,48 @@ QPair<QString,QString> GameController::cmdSchedule()
                    .arg(typeName)
                    .arg(e.subject);
     }
+
+    return {out.trimmed(), "text"};
+}
+
+QPair<QString,QString> GameController::cmdStatus()
+{
+    QString out;
+
+    out += QString("── Статус ─────────────────────\n");
+    out += QString("День %1 | %2:%3\n")
+               .arg(m_state.gameDay)
+               .arg(m_state.gameHours, 2, 10, QChar('0'))
+               .arg(m_state.gameMinutes, 2, 10, QChar('0'));
+    out += QString("Должность: %1\n")
+               .arg(m_state.currentJob.displayName);
+    out += QString("Энергия: %1/%2 | Выгорание: %3/100\n")
+               .arg(m_state.energy)
+               .arg(m_state.maxEnergy)
+               .arg(m_state.burnout);
+    out += QString("Деньги: %1 | Долг: %2\n")
+               .arg(m_state.money)
+               .arg(m_state.debt);
+    out += QString("Еда: %1 дн. | Беспорядок: %2/10\n")
+               .arg(m_state.foodStock)
+               .arg(m_state.roomMessLevel);
+
+    if (m_state.pendingIncident)
+        out += "Прод горит! Введи fix или ignore.\n";
+    if (m_state.pendingReview)
+        out += QString("Ожидает code review: %1 багов. "
+                       "Введи review fix или review skip.\n")
+                   .arg(m_state.reviewBugsFound);
+    if (m_state.pendingLab)
+        out += QString("Активная лаба: %1. "
+                       "Введи submit.\n")
+                   .arg(m_state.pendingLabSubject);
+
+    if (m_state.lifeStage == LifeStage::Student)
+        out += QString("Успеваемость: %1/100 | Лаб сдано: %2/%3\n")
+                   .arg(m_state.studyScore)
+                   .arg(m_state.labsCompleted)
+                   .arg(m_state.labsRequired);
 
     return {out.trimmed(), "text"};
 }
@@ -875,6 +1307,8 @@ QPair<QString,QString> GameController::cmdWalk()
     m_state.energy = qMin(m_state.maxEnergy, m_state.energy + 15);
     updateBurnout(-5);
     advanceTime(45);
+    updateMood(+10);
+    updateStress(-8);
 
     return {"Вышел на улицу. +15 энергии, выгорание -5.", "success"};
 }
@@ -893,6 +1327,223 @@ QPair<QString,QString> GameController::cmdClean()
         QString("Убрался в комнате. Уровень беспорядка: %1/10.")
             .arg(m_state.roomMessLevel),
         "success"
+    };
+}
+
+QPair<QString,QString> GameController::cmdJobs()
+{
+    if (m_state.jobMarket.isEmpty() ||
+        m_state.gameDay >= m_state.jobMarketRefreshDay + 7)
+    {
+        m_state.jobMarket =
+            CareerData::generateJobMarket(m_state);
+        m_state.jobMarketRefreshDay = m_state.gameDay;
+    }
+
+    m_state.jobMarket.removeIf([&](const JobOffer &o){
+        return o.expiresDay < m_state.gameDay;
+    });
+
+    if (m_state.jobMarket.isEmpty())
+        return {"Нет доступных вакансий. Подожди обновления рынка.", "warning"};
+
+    QString out = "── Рынок труда ─────────────────\n";
+
+    for (int i = 0; i < m_state.jobMarket.size(); i++)
+    {
+        const auto &o = m_state.jobMarket[i];
+        CompanyInfo ci = CareerData::companyInfo(o.companyType);
+        JobInfo     ji = CareerData::jobInfo(o.title);
+
+        double skillAvg = 0;
+        for (auto v : m_state.skills) skillAvg += v;
+        skillAvg /= qMax(1, m_state.skills.size());
+
+        bool available =
+            m_state.level    >= o.levelRequired &&
+            m_state.reputation >= o.repRequired &&
+            skillAvg         >= o.skillRequired;
+
+        QString status = available ? "✓" : "✗";
+
+        out += QString("[%1] %2 %3 @ %4\n"
+                       "    Зарплата: %5/день | "
+                       "Требования: lvl%6 rep%7 skill%.1f\n"
+                       "    %8\n"
+                       "    Истекает: день %9\n")
+                   .arg(i + 1)
+                   .arg(status)
+                   .arg(ji.displayName)
+                   .arg(ci.name)
+                   .arg(o.salaryPerDay)
+                   .arg(o.levelRequired)
+                   .arg(o.repRequired)
+                   .arg(o.skillRequired)
+                   .arg(o.description)
+                   .arg(o.expiresDay);
+    }
+
+    out += "\nДля подачи заявки: apply <номер>";
+
+    return {out.trimmed(), "text"};
+}
+
+QPair<QString,QString> GameController::cmdApply(int index)
+{
+    if (m_state.jobMarket.isEmpty())
+        return {"Сначала посмотри вакансии: jobs", "warning"};
+
+    if (index < 1 || index > m_state.jobMarket.size())
+        return {QString("Нет вакансии с номером %1").arg(index), "error"};
+
+    if (m_state.interviewsCooldown > m_state.gameDay)
+        return {
+            QString("Следующее собеседование можно пройти на день %1.")
+                .arg(m_state.interviewsCooldown),
+            "warning"
+        };
+
+    const JobOffer &offer = m_state.jobMarket[index - 1];
+
+    double skillAvg = 0;
+    for (auto v : m_state.skills) skillAvg += v;
+    skillAvg /= qMax(1, m_state.skills.size());
+
+    if (m_state.level < offer.levelRequired)
+        return {
+            QString("Недостаточный уровень. Нужно: %1, у тебя: %2")
+                .arg(offer.levelRequired).arg(m_state.level),
+            "error"
+        };
+
+    if (m_state.reputation < offer.repRequired)
+        return {
+            QString("Недостаточная репутация. Нужно: %1, у тебя: %2")
+                .arg(offer.repRequired).arg(m_state.reputation),
+            "error"
+        };
+
+    advanceTime(120);
+    m_state.energy = qMax(0, m_state.energy - 25);
+    m_state.interviewsCooldown = m_state.gameDay + 2;
+
+    emit_msg("── Собеседование ───────────────", "dim");
+    emit_msg(
+        QString("Подал заявку: %1 @ %2")
+            .arg(CareerData::jobInfo(offer.title).displayName)
+            .arg(CareerData::companyInfo(offer.companyType).name),
+        "text"
+        );
+
+    int passChance = 40
+                     + int((skillAvg - offer.skillRequired) * 10)
+                     + (m_state.reputation - offer.repRequired) / 2
+                     - int(m_state.burnout * 0.2)
+                     - m_state.sleepDebt * 5
+                     + (m_state.mood - 50) / 5
+                     - m_state.stress / 10
+                     + (m_state.consecutiveRefusals > 2 ? -10 : 0);
+
+    passChance = qBound(5, passChance, 90);
+
+    int roll = QRandomGenerator::global()->bounded(100);
+
+    QStringList questions = {
+        "Расскажи о REST vs GraphQL.",
+        "Что такое SOLID?",
+        "Как работает индекс в БД?",
+        "Объясни CAP-теорему.",
+        "Что такое Docker?",
+        "Как работает TCP/IP?",
+        "Что такое микросервисы?"
+    };
+    QString question = questions[
+        QRandomGenerator::global()->bounded(questions.size())];
+
+    emit_msg(QString("Вопрос: %1").arg(question), "text");
+
+    if (roll < passChance)
+    {
+        m_state.consecutiveRefusals = 0;
+
+        CompanyInfo newCompany = CareerData::companyInfo(offer.companyType);
+        JobInfo     newJob     = CareerData::jobInfo(offer.title);
+
+        if (m_state.lifeStage == LifeStage::Employed)
+        {
+            emit_msg(
+                QString("Уволился из %1.")
+                    .arg(m_state.currentCompany.name),
+                "text"
+                );
+        }
+
+        m_state.lifeStage      = LifeStage::Employed;
+        m_state.currentJob     = newJob;
+        m_state.currentCompany = newCompany;
+
+        if (m_state.housingType == HousingType::Dorm)
+        {
+            m_state.housingType = HousingType::Rent;
+            m_state.rentCost    = 15000;
+            emit_msg(
+                "Теперь снимаешь квартиру. Аренда: 15 000/мес.",
+                "text"
+                );
+        }
+
+        m_state.jobMarket.removeAt(index - 1);
+
+        return {
+            QString("Принят! %1 @ %2. Зарплата: %3/день.")
+                .arg(newJob.displayName)
+                .arg(newCompany.name)
+                .arg(newCompany.salaryPerDay + newJob.salaryBonus),
+            "success"
+        };
+    }
+    else
+    {
+        m_state.consecutiveRefusals++;
+        updateBurnout(+5);
+
+        QString reason;
+        if (skillAvg < offer.skillRequired)
+            reason = "Недостаточный уровень навыков.";
+        else if (m_state.burnout > 60)
+            reason = "Выглядел уставшим и растерянным.";
+        else if (m_state.sleepDebt > 3)
+            reason = "Был не в форме — чувствовалось по ответам.";
+        else
+            reason = "Не прошёл техническую часть.";
+
+        return {
+            QString("Отказ. %1 Отказов подряд: %2.")
+                .arg(reason)
+                .arg(m_state.consecutiveRefusals),
+            "warning"
+        };
+    }
+}
+
+QPair<QString,QString> GameController::cmdQuit()
+{
+    if (m_state.lifeStage != LifeStage::Employed)
+        return {"Ты нигде не работаешь.", "warning"};
+
+    QString company = m_state.currentCompany.name;
+
+    m_state.lifeStage      = LifeStage::Freelancer;
+    m_state.currentJob     = CareerData::jobInfo(JobTitle::Freelancer);
+    m_state.currentCompany = CareerData::companyInfo(CompanyType::None);
+
+    m_state.reputation = qMax(0, m_state.reputation - 5);
+
+    return {
+        QString("Уволился из %1. -5 репутации. "
+                "Теперь ты фрилансер.")
+            .arg(company),
+        "text"
     };
 }
 
@@ -1024,6 +1675,8 @@ void GameController::updateBurnout(int delta)
 
 void GameController::onNewDay()
 {
+    applyCharacterInteractions();
+
     m_state.sleptTonight = false;
 
     if (!m_state.sleptTonight && m_state.gameDay > 1)
@@ -1051,6 +1704,7 @@ void GameController::onNewDay()
                 QString("Дедлайн через 3 дня: %1").arg(p.name),
                 "warning"
                 );
+            updateStress(+5);
         }
         else if (daysLeft == 1)
         {
@@ -1058,6 +1712,7 @@ void GameController::onNewDay()
                 QString("Завтра дедлайн: %1! Торопись.").arg(p.name),
                 "warning"
                 );
+            updateStress(+10);
         }
         else if (daysLeft <= 0)
         {
@@ -1070,13 +1725,15 @@ void GameController::onNewDay()
             m_state.burnout = qMin(m_state.maxBurnout, m_state.burnout + 10);
 
             emit_msg(
-                QString("✗ Дедлайн провален: %1\n"
+                QString("Дедлайн провален: %1\n"
                         "  -%2 репутации, -%3 денег, выгорание +10")
                     .arg(p.name)
                     .arg(repLoss)
                     .arg(moneyLoss),
                 "error"
                 );
+            updateStress(+20);
+            updateMood(-15);
             p.deadlineDay = 0;
         }
     }
@@ -1312,6 +1969,144 @@ void GameController::onNewDay()
     m_state.laundryDays++;
 
     generateDayEvents();
+
+    if (m_state.lifeStage == LifeStage::Student)
+    {
+        if (!m_state.pendingHomework &&
+            m_state.gameDay % QRandomGenerator::global()->bounded(3, 6) == 0)
+        {
+            auto subjects = CareerData::csSubjects();
+            m_state.homeworkSubject = subjects[
+                QRandomGenerator::global()->bounded(subjects.size())];
+            m_state.homeworkDeadline = m_state.gameDay + 3;
+            m_state.pendingHomework  = true;
+
+            emit_msg(
+                QString("Домашнее задание: %1. "
+                        "Сдать до дня %2. Введи homework.")
+                    .arg(m_state.homeworkSubject)
+                    .arg(m_state.homeworkDeadline),
+                "warning"
+                );
+        }
+
+        if (m_state.pendingHomework &&
+            m_state.gameDay > m_state.homeworkDeadline)
+        {
+            m_state.pendingHomework = false;
+            m_state.homeworksMissed++;
+            m_state.studyScore = qMax(0, m_state.studyScore - 8);
+            updateStress(+5);
+
+            emit_msg(
+                QString("Просрочил домашнее по \"%1\". "
+                        "Успеваемость -8. Пропущено: %2")
+                    .arg(m_state.homeworkSubject)
+                    .arg(m_state.homeworksMissed),
+                "error"
+                );
+
+            if (m_state.homeworksMissed >= 5)
+            {
+                emit_msg(
+                    "Слишком много пропущенных заданий. "
+                    "Угроза отчисления.",
+                    "error"
+                    );
+                m_state.failedExams++;
+                checkExpulsion();
+            }
+        }
+
+        int weekDay = m_state.gameDay % 7;
+        if (weekDay >= 1 && weekDay <= 5)
+        {
+            m_state.money = qMax(0, m_state.money - m_state.transportCost);
+        }
+
+        if (m_state.hostingCost > 0 && m_state.gameDay % 30 == 0)
+        {
+            if (m_state.money >= m_state.hostingCost)
+            {
+                m_state.money -= m_state.hostingCost;
+                emit_msg(
+                    QString("Хостинг: -%1").arg(m_state.hostingCost),
+                    "text"
+                    );
+            }
+            else
+            {
+                emit_msg(
+                    "Нет денег на хостинг! Проект недоступен.",
+                    "error"
+                    );
+                updateStress(+5);
+            }
+        }
+
+        if (m_state.parentAllowance > 0 && m_state.gameDay % 30 == 0)
+        {
+            m_state.money += m_state.parentAllowance;
+            emit_msg(
+                QString("Родители перевели: +%1")
+                    .arg(m_state.parentAllowance),
+                "success"
+                );
+        }
+
+        if (m_state.grantAmount > 0 && m_state.gameDay % 90 == 0)
+        {
+            m_state.money += m_state.grantAmount;
+            emit_msg(
+                QString("Грант зачислен: +%1").arg(m_state.grantAmount),
+                "success"
+                );
+        }
+
+        if (!m_state.courseWorkActive &&
+            !m_state.courseWorkSubmitted &&
+            m_state.academicDay == 30)
+        {
+            QStringList projects = {
+                "Backend интернет-магазина",
+                "CRM система",
+                "REST API для мобильного приложения",
+                "Система управления задачами",
+                "Чат-сервер на WebSocket"
+            };
+            m_state.courseWorkName     = projects[
+                QRandomGenerator::global()->bounded(projects.size())];
+            m_state.courseWorkProgress = 0;
+            m_state.courseWorkDeadline = m_state.gameDay + 60;
+            m_state.courseWorkActive   = true;
+
+            emit_msg(
+                QString("Курсовая работа: \"%1\". "
+                        "Сдать до дня %2. Делай частями: coursework.")
+                    .arg(m_state.courseWorkName)
+                    .arg(m_state.courseWorkDeadline),
+                "highlight"
+                );
+        }
+
+        if (m_state.courseWorkActive &&
+            !m_state.courseWorkSubmitted &&
+            m_state.gameDay > m_state.courseWorkDeadline)
+        {
+            m_state.courseWorkActive = false;
+            m_state.studyScore = qMax(0, m_state.studyScore - 25);
+            m_state.failedExams++;
+            updateStress(+20);
+            updateMood(-15);
+
+            emit_msg(
+                "Не сдал курсовую в срок! "
+                "Успеваемость -25. Угроза отчисления.",
+                "error"
+                );
+            checkExpulsion();
+        }
+    }
 }
 
 void GameController::checkGameOver()
@@ -1535,10 +2330,37 @@ void GameController::triggerEvent(const GameEvent &e)
         break;
 
     case EventType::ServerDown:
-        emit_msg("Введи fix — починить (−40 энергии, +репутация)", "warning");
-        emit_msg("Введи ignore — игнорировать (−репутация, штраф)", "warning");
+    {
+        m_state.prodIncidents++;
+
+        bool isNight = (m_state.gameHours >= 0 && m_state.gameHours < 6);
+
+        if (isNight)
+        {
+            emit_msg(
+                "ALERT [02:34]: Прод упал. "
+                "Пользователи не могут зайти.",
+                "error"
+                );
+            emit_msg(
+                "Тебя разбудили. Вводи fix или ignore.",
+                "error"
+                );
+            m_state.sleepDebt++;
+            m_state.sleptTonight = false;
+        }
+        else
+        {
+            emit_msg(
+                "ALERT: Сервер недоступен в рабочее время.",
+                "error"
+                );
+            emit_msg("Введи fix или ignore.", "warning");
+        }
+
         m_state.pendingIncident = true;
         break;
+    }
 
     case EventType::InternetBill:
         if (m_state.money >= 500)
@@ -1796,4 +2618,187 @@ void GameController::triggerStudyEvent(StudyEvent &e)
 
     e.attended = true;
     emit stateChanged();
+}
+
+void GameController::triggerCodeReview(
+    const QString &projectName,
+    int difficulty,
+    int bugsWasFixed)
+{
+    auto rnd = [](int a, int b){
+        return QRandomGenerator::global()->bounded(a, b);
+    };
+
+    double skillAvg = 0;
+    for (auto v : m_state.skills) skillAvg += v;
+    skillAvg /= qMax(1, m_state.skills.size());
+
+    int quality = int(skillAvg * 10)
+                  - int(m_state.burnout * 0.3)
+                  - m_state.sleepDebt * 3
+                  + rnd(-10, 11);
+
+    quality = qBound(0, quality, 100);
+
+    int hiddenBugs = 0;
+    if (quality < 30)       hiddenBugs = rnd(3, 7);
+    else if (quality < 60)  hiddenBugs = rnd(1, 4);
+    else if (quality < 80)  hiddenBugs = rnd(0, 2);
+
+    m_state.pendingReview     = true;
+    m_state.reviewProjectName = projectName;
+    m_state.reviewBugsFound   = hiddenBugs;
+    m_state.reviewQuality     = quality;
+
+    emit_msg("── Code Review ──────────────", "dim");
+
+    if (quality >= 80)
+    {
+        emit_msg(
+            QString("LGTM! Качество кода: %1/100. "
+                    "Отличная работа.").arg(quality),
+            "success"
+            );
+    }
+    else if (quality >= 60)
+    {
+        emit_msg(
+            QString("Код приемлем. Качество: %1/100. "
+                    "Есть замечания.").arg(quality),
+            "text"
+            );
+    }
+    else if (quality >= 40)
+    {
+        emit_msg(
+            QString("Код требует доработки. "
+                    "Качество: %1/100.").arg(quality),
+            "warning"
+            );
+    }
+    else
+    {
+        emit_msg(
+            QString("Код отвратительный. "
+                    "Качество: %1/100. Нужен рефакторинг.").arg(quality),
+            "error"
+            );
+    }
+
+    QStringList comments;
+    if (quality < 70)
+        comments << "— плохой нейминг переменных";
+    if (quality < 60)
+        comments << "— слишком большие классы";
+    if (quality < 50)
+        comments << "— нет тестов";
+    if (quality < 40)
+        comments << "— нет документации";
+    if (quality < 30)
+        comments << "— дублирование кода";
+    if (m_state.burnout > 60)
+        comments << "— хаотичная структура (видно что делал на износе)";
+
+    for (const auto &c : comments)
+        emit_msg(c, "text");
+
+    if (hiddenBugs > 0)
+    {
+        emit_msg(
+            QString("Найдено скрытых багов: %1. "
+                    "Введи review fix — исправить, "
+                    "review skip — пропустить.")
+                .arg(hiddenBugs),
+            "error"
+            );
+    }
+    else
+    {
+        emit_msg("Скрытых багов не найдено.", "success");
+        m_state.pendingReview = false;
+
+        if (quality >= 80)
+        {
+            m_state.reputation += 2;
+            emit_msg("+2 репутации за чистый код.", "success");
+        }
+    }
+}
+
+void GameController::updateMood(int delta)
+{
+    m_state.mood = qBound(0, m_state.mood + delta, m_state.maxMood);
+}
+
+void GameController::updateStress(int delta)
+{
+    m_state.stress = qBound(0, m_state.stress + delta, m_state.maxStress);
+}
+
+void GameController::updateTechDebt(int delta)
+{
+    m_state.techDebt = qBound(0, m_state.techDebt + delta, 100);
+}
+
+void GameController::applyCharacterInteractions()
+{
+    if (m_state.stress >= 80)
+    {
+        updateMood(-3);
+        if (m_state.stress == 80)
+            emit_msg("Стресс зашкаливает. Настроение падает.", "warning");
+    }
+    else if (m_state.stress >= 50)
+    {
+        updateMood(-1);
+    }
+
+    if (m_state.burnout >= 80)
+        updateMood(-2);
+    else if (m_state.burnout >= 60)
+        updateMood(-1);
+
+    if (m_state.mood <= 20)
+    {
+        updateStress(+3);
+        if (m_state.mood == 20)
+            emit_msg("Совсем нет желания работать.", "error");
+    }
+    else if (m_state.mood <= 40)
+        updateStress(+1);
+
+    if (m_state.sleepDebt >= 3)
+    {
+        updateMood(-2);
+        updateStress(+2);
+        updateBurnout(+1);
+    }
+
+    if (m_state.techDebt >= 70)
+    {
+        updateStress(+3);
+        emit_msg(
+            QString("Технический долг %1/100. "
+                    "Код разваливается.").arg(m_state.techDebt),
+            "error"
+            );
+    }
+    else if (m_state.techDebt >= 40)
+        updateStress(+1);
+
+    if (m_state.mood >= 80 && m_state.stress > 0)
+        updateStress(-1);
+
+    if (m_state.stress >= 90 &&
+        QRandomGenerator::global()->bounded(100) < 20)
+    {
+        int energyLoss = QRandomGenerator::global()->bounded(20, 41);
+        m_state.energy = qMax(0, m_state.energy - energyLoss);
+        updateBurnout(+5);
+        emit_msg(
+            QString("Паническая атака. -%1 энергии, выгорание +5.")
+                .arg(energyLoss),
+            "error"
+            );
+    }
 }

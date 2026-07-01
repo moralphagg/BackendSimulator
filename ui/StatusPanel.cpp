@@ -20,7 +20,19 @@ StatusPanel::StatusPanel(QWidget *parent)
     queueLabel             = new QLabel("Очередь: 0/5");
     jobLabel               = new QLabel("Должность: Фрилансер");
     companyLabel           = new QLabel("Компания: —");
-    burnoutBar             = new QProgressBar();
+    burnoutBar             = new QProgressBar();moodBar   = new QProgressBar();
+    stressBar = new QProgressBar();
+    techDebtLabel = new QLabel("Техдолг: 0/100");
+
+    moodBar->setRange(0, 100);
+    moodBar->setValue(80);
+    moodBar->setTextVisible(false);
+    moodBar->setFixedHeight(6);
+
+    stressBar->setRange(0, 100);
+    stressBar->setValue(0);
+    stressBar->setTextVisible(false);
+    stressBar->setFixedHeight(6);
 
     burnoutBar->setRange(0, 100);
     burnoutBar->setValue(0);
@@ -51,6 +63,11 @@ StatusPanel::StatusPanel(QWidget *parent)
     layout->addWidget(companyLabel);
     layout->addWidget(new QLabel("Выгорание:"));
     layout->addWidget(burnoutBar);
+    layout->addWidget(new QLabel("Настроение:"));
+    layout->addWidget(moodBar);
+    layout->addWidget(new QLabel("Стресс:"));
+    layout->addWidget(stressBar);
+    layout->addWidget(techDebtLabel);
 }
 
 void StatusPanel::setLevel(int value, int maxLevel) {
@@ -135,4 +152,47 @@ void StatusPanel::setBurnout(int value, int max)
                                   "QProgressBar { background: #333; border-radius: 3px; }"
                                   "QProgressBar::chunk { background: %1; border-radius: 3px; }"
                                   ).arg(color));
+}
+
+void StatusPanel::setMood(int value, int max)
+{
+    moodBar->setMaximum(max);
+    moodBar->setValue(value);
+
+    QString color;
+    if (value >= 70)      color = "#3fb950"; // зелёный
+    else if (value >= 40) color = "#d29922"; // жёлтый
+    else                  color = "#f78166"; // красный
+
+    moodBar->setStyleSheet(QString(
+                               "QProgressBar { background:#333; border-radius:3px; }"
+                               "QProgressBar::chunk { background:%1; border-radius:3px; }"
+                               ).arg(color));
+}
+
+void StatusPanel::setStress(int value, int max)
+{
+    stressBar->setMaximum(max);
+    stressBar->setValue(value);
+
+    QString color;
+    if (value < 40)       color = "#3fb950";
+    else if (value < 70)  color = "#d29922";
+    else                  color = "#f78166";
+
+    stressBar->setStyleSheet(QString(
+                                 "QProgressBar { background:#333; border-radius:3px; }"
+                                 "QProgressBar::chunk { background:%1; border-radius:3px; }"
+                                 ).arg(color));
+}
+
+void StatusPanel::setTechDebt(int value)
+{
+    QString color = value < 30 ? "color:#3fb950"
+                    : value < 60 ? "color:#d29922"
+                                 : "color:#f78166";
+    techDebtLabel->setStyleSheet(color);
+    techDebtLabel->setText(
+        QString("Техдолг: %1/100").arg(value)
+        );
 }

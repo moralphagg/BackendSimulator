@@ -161,6 +161,10 @@ void MainWindow::updateUi()
         );
     statusPanel->setBurnout(state.burnout, state.maxBurnout);
 
+    statusPanel->setMood(state.mood, state.maxMood);
+    statusPanel->setStress(state.stress, state.maxStress);
+    statusPanel->setTechDebt(state.techDebt);
+
     projectsPanel->clear();
 
     for (const auto &project : state.currentProjects)

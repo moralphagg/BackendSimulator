@@ -47,6 +47,13 @@ private:
     void generateDayEvents();
     void checkTimeEvents();
     void triggerEvent(const GameEvent &e);
+    void triggerCodeReview(const QString &projectName,
+                           int difficulty, int bugsWasFixed);
+
+    void updateMood(int delta);
+    void updateStress(int delta);
+    void updateTechDebt(int delta);
+    void applyCharacterInteractions();
 
     QPair<QString,QString> cmdStart();
     QPair<QString,QString> cmdWork();
@@ -59,6 +66,11 @@ private:
     QPair<QString,QString> cmdMeeting();
     QPair<QString,QString> cmdResearch();
     QPair<QString,QString> cmdMentor();
+    QPair<QString,QString> cmdHomework(const QString &action);
+    QPair<QString,QString> cmdCoursework();
+    QPair<QString,QString> cmdTutor();
+    QPair<QString,QString> cmdParents();
+    QPair<QString,QString> cmdGrant();
     QPair<QString,QString> cmdRefactor();
     QPair<QString,QString> cmdDocument();
     QPair<QString,QString> cmdAnalyze();
@@ -68,11 +80,16 @@ private:
     QPair<QString,QString> cmdBuy(const QString &item);
     QPair<QString,QString> cmdLaundry();
     QPair<QString,QString> cmdWalk();
-    QPair<QString,QString> cmdClean();
     QPair<QString,QString> cmdSchedule();
+    QPair<QString,QString> cmdStatus();
+    QPair<QString,QString> cmdClean();
     QPair<QString,QString> cmdSave();
     QPair<QString,QString> cmdLoad();
     QPair<QString,QString> cmdFreelance();
+    QPair<QString,QString> cmdReview(const QString &action);
+    QPair<QString,QString> cmdJobs();
+    QPair<QString,QString> cmdApply(int index);
+    QPair<QString,QString> cmdQuit();
 
     void checkLevelUp();
     void updateProjectQueue();

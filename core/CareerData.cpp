@@ -1,11 +1,14 @@
 #include "CareerData.h"
 #include "GameState.h"
+#include <QRandomGenerator>
 
 JobInfo CareerData::jobInfo(JobTitle title)
 {
     switch (title) {
     case JobTitle::Unemployed:
         return {title, 0,    0,  0,  0.7,  "Безработный"};
+    case JobTitle::Vibecoder:
+        return {title, 0,    0,  0, 0.85,      "Vibecoder"};
     case JobTitle::Freelancer:
         return {title, 0,    0,  0,  0.9,  "Фрилансер"};
     case JobTitle::Intern:
@@ -22,6 +25,8 @@ JobInfo CareerData::jobInfo(JobTitle title)
         return {title, 2000, 150,22, 1.7,  "Architect"};
     case JobTitle::CTO:
         return {title, 3000, 200,27, 2.0,  "CTO"};
+    case JobTitle::Founder:
+        return {title, 5000, 250, 30, 2.5, "Founder"};
     default:
         return {title, 0, 0, 0, 1.0, "???"};
     }
@@ -57,6 +62,7 @@ JobTitle CareerData::nextTitle(const GameState &s)
 
     struct Req { JobTitle t; int rep; int lvl; };
     static const QList<Req> reqs = {
+                                    {JobTitle::Founder,   250, 30},
                                     {JobTitle::CTO,       200, 27},
                                     {JobTitle::Architect, 150, 22},
                                     {JobTitle::Lead,      100, 17},
@@ -64,6 +70,7 @@ JobTitle CareerData::nextTitle(const GameState &s)
                                     {JobTitle::Middle,    30,  7 },
                                     {JobTitle::Junior,    10,  3 },
                                     {JobTitle::Intern,    0,   1 },
+                                    {JobTitle::Vibecoder, 0,   0 },
                                     {JobTitle::Freelancer,0,   0 },
                                     };
 
@@ -123,4 +130,94 @@ QStringList CareerData::csSubjects()
         "Архитектура ПО",
         "Английский язык"
     };
+}
+QList<JobOffer> CareerData::generateJobMarket(const GameState &s)
+{
+    QList<JobOffer> offers;
+    auto rnd = [](int a, int b){
+        return QRandomGenerator::global()->bounded(a, b);
+    };
+
+    offers.append({
+        CompanyType::Outsource,
+        JobTitle::Junior,
+        650, 5, 2, 2.0,
+        "Аутсорс: Junior-разработчик. "
+        "Стабильно, скучновато.",
+        s.gameDay + 7
+    });
+
+    if (s.level >= 3)
+    {
+        offers.append({
+            CompanyType::Startup,
+            JobTitle::Junior,
+            900, 10, 3, 2.5,
+            "Стартап: Junior. Быстрый рост, "
+            "жёсткие дедлайны, equity.",
+            s.gameDay + 5
+        });
+    }
+
+    if (s.level >= 5)
+    {
+        offers.append({
+            CompanyType::Outsource,
+            JobTitle::Middle,
+            1100, 25, 5, 3.5,
+            "Аутсорс: Middle. "
+            "Разнообразные проекты.",
+            s.gameDay + 7
+        });
+    }
+
+    if (s.level >= 8 && s.reputation >= 50)
+    {
+        offers.append({
+            CompanyType::Corporation,
+            JobTitle::Middle,
+            1400, 50, 8, 4.0,
+            "Корпорация: Middle. "
+            "Высокая зарплата, медленный рост.",
+            s.gameDay + 10
+        });
+    }
+
+    if (s.level >= 8)
+    {
+        offers.append({
+            CompanyType::Government,
+            JobTitle::Middle,
+            900, 30, 6, 3.0,
+            "Госкомпания: Middle. "
+            "Стабильность, мягкие дедлайны.",
+            s.gameDay + 14
+        });
+    }
+
+    if (s.level >= 12 && s.reputation >= 60)
+    {
+        offers.append({
+            CompanyType::Startup,
+            JobTitle::Senior,
+            1800, 60, 12, 5.0,
+            "Стартап: Senior. "
+            "Высокая ответственность, большой рост.",
+            s.gameDay + 5
+        });
+    }
+
+    if (s.level >= 20 && s.reputation >= 150)
+    {
+        offers.append({
+            CompanyType::FAANG,
+            JobTitle::Senior,
+            3000, 150, 20, 7.0,
+            "FAANG: Senior. "
+            "Мечта. Жесточайший отбор.",
+            s.gameDay + 7
+        });
+    }
+
+    return offers;
 }
